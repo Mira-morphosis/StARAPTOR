@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "staraptor"
+version = "0.1.0"
+description = ""
+authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+httpx = "^0.28.1"
+aiolimiter = "^1.2.1"
+
+
+
+[tool.poetry-workspace-plugin]
+workspaces = {fetcher = "libs/fetcher"}
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
