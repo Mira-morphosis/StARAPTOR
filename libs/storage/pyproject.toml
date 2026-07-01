@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "staraptor"
+name = "storage"
 version = "0.1.0"
 description = ""
 authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
@@ -7,10 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.13"
+fetcher = { path = "../fetcher", develop = true }
+duckdb = "^1.5.4"
+python-dotenv = "^1.2.2"
 
 
-[tool.poetry-workspace-plugin]
-workspaces = {fetcher = "libs/fetcher",storage = "libs/storage"evaluator = "libs/evaluator"}
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

@@ -1,2 +1,3 @@
 /.venv/
-/libs/fetcher/tests/out/result.csv
+/libs/fetcher/tests/out/*
+/libs/storage/tests/out/*

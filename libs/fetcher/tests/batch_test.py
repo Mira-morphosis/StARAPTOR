@@ -2,7 +2,7 @@ import asyncio
 import csv
 from pathlib import Path
 
-from fetcher.fetcher_interface import fetch_periodically
+from fetcher.interface import fetch_periodically
 
 async def test():
     try:

@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "staraptor"
+name = "evaluator"
 version = "0.1.0"
 description = ""
 authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
@@ -9,8 +9,6 @@ readme = "README.md"
 python = "^3.13"
 
 
-[tool.poetry-workspace-plugin]
-workspaces = {fetcher = "libs/fetcher",storage = "libs/storage"evaluator = "libs/evaluator"}
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
