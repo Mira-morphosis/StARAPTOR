@@ -2,11 +2,11 @@ import asyncio
 import csv
 from pathlib import Path
 
-from fetcher.interface import fetch_periodically
+from fetcher.fetcher_interface import fetch_today
 
 async def test():
     try:
-        reviews:list[dict] = await fetch_periodically(app_id=730, max_batches=5, verbose=True)
+        reviews: list[dict] = await fetch_today(app_id=730, verbose=True)
 
         if not reviews:
             print("No reviews found to save.")

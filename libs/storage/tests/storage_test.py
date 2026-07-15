@@ -1,17 +1,12 @@
 import asyncio
-import os
 from pathlib import Path
 
-from storage.main import storage_updater
+from storage.storage_interface import review_updater
 from storage.storage_utils import export
 
 
 async def test():
-    await storage_updater(
-        app_id=730,
-        max_batches=5,
-        verbose=True
-    )
+    await review_updater(app_id=730, max_days=1, verbose=True)
     export(730, path=Path('out/'))
 
 if __name__ == "__main__":

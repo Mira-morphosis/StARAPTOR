@@ -4,6 +4,7 @@
     <content url="file://$MODULE_DIR$/libs/storage" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="fetcher" exported="" />
+    <orderEntry type="module" module-name="evaluator" exported="" />
     <orderEntry type="jdk" jdkName="Poetry (storage)" jdkType="Python SDK" />
   </component>
 </module>

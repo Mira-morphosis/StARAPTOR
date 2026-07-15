@@ -58,38 +58,41 @@ def _init_db(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute("""
                  CREATE TABLE IF NOT EXISTS reviews
                  (
-                     recommendationid
-                     VARCHAR
-                     PRIMARY
-                     KEY,
-                     review
-                     VARCHAR,
-                     language
-                     VARCHAR,
-                     steam_purchase
-                     BOOLEAN,
-                     received_for_free
-                     BOOLEAN,
-                     voted_up
-                     BOOLEAN,
-                     playtime_at_review
-                     INTEGER,
-                     primarily_steam_deck
-                     BOOLEAN,
-                     has_hardware_info
-                     BOOLEAN,
-                     hw_resolution
-                     VARCHAR,
-                     hw_ram
-                     VARCHAR,
-                     hw_vram
-                     VARCHAR,
-                     hw_gpu
-                     VARCHAR,
-                     hw_os
-                     VARCHAR,
-                     hw_cpu_vendor
-                     VARCHAR
+                     recommendationid VARCHAR PRIMARY KEY,
+                     review VARCHAR,
+                     language VARCHAR,
+                     timestamp_updated INTEGER,
+                     steam_purchase BOOLEAN,
+                     received_for_free BOOLEAN,
+                     voted_up BOOLEAN,
+                     weighted_vote_score DOUBLE,
+                     playtime_at_review INTEGER,
+                     primarily_steam_deck BOOLEAN,
+                     has_hardware_info BOOLEAN,
+                     hw_resolution VARCHAR,
+                     hw_ram VARCHAR,
+                     hw_vram VARCHAR,
+                     hw_gpu VARCHAR,
+                     hw_os VARCHAR,
+                     hw_cpu_vendor VARCHAR,
+                     isSpam BOOLEAN,
+                     multiplayer INTEGER,
+                     immersion INTEGER,
+                     community INTEGER,
+                     replayability INTEGER,
+                     story INTEGER,
+                     monetizationModel INTEGER,
+                     gameplay INTEGER,
+                     controls INTEGER,
+                     graphics INTEGER,
+                     customization INTEGER,
+                     audio INTEGER,
+                     difficulty INTEGER,
+                     isUseful BOOLEAN,
+                     containsPositiveAspects BOOLEAN,
+                     containsNegativeAspects BOOLEAN,
+                     actuallyRecommendsTitle BOOLEAN,
+                     containsBugDescription BOOLEAN
                  )
     """)
 
@@ -110,13 +113,12 @@ def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
     if not reviews_list:
         return
 
-        # Estraiamo le chiavi dinamicamente dal primo dizionario della lista
+        # We extract keys from the first element of the list
     columns = list(reviews_list[0].keys())
 
-    # Prepariamo i placeholder nominati per DuckDB (es: $recommendationid, $review, ...)
+    # Placeholders are prepared so that DuckDB can dynamically build the query (e.g., $recommendationid, $review, ...)
     placeholders = ", ".join([f"${col}" for col in columns])
 
-    # Costruiamo la query SQL in modo dinamico
     query = f"""
             INSERT OR IGNORE INTO reviews ({", ".join(columns)}) 
             VALUES ({placeholders})
@@ -126,8 +128,7 @@ def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
         _init_db(conn)
 
         try:
-            # Passiamo direttamente la lista di dizionari!
-            # DuckDB mappa da solo le chiavi del dizionario sui parametri $colonna a livello C++
+            # DuckDB automatically maps the $column keys
             conn.executemany(query, reviews_list)
 
         except Exception as e:

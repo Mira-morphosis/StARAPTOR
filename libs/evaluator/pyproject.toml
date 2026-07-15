@@ -7,6 +7,11 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.13"
+instructor = "^1.15.4"
+python-dotenv = "^1.2.2"
+anthropic = "^0.115.0"
+openai = "^2.44.0"
+pydantic = "^2.13.4"
 
 
 [build-system]
