@@ -8,9 +8,10 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.13"
 fetcher = { path = "../fetcher", develop = true }
-evaluator = { path = "../evaluator", develop = true}
+evaluator = { path = "../evaluator", develop = true }
 duckdb = "^1.5.4"
 python-dotenv = "^1.2.2"
+pandas = "^3.0.5"
 
 
 [build-system]

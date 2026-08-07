@@ -10,6 +10,9 @@ base_url = os.getenv("STARAPTOR_BASE_URL") or None
 api_key = os.getenv("STARAPTOR_API_KEY", "staraptor")
 mode_str = os.getenv("STARAPTOR_INSTRUCTOR_MODE", "JSON")
 
+
+v1_url = base_url+"v1" if base_url is not None else None
+
 def get_instructor_client():
     """
     Initializes the Instructor client dynamically based on .env
@@ -21,7 +24,7 @@ def get_instructor_client():
     if provider_type == "openai_compatible":
         from openai import AsyncOpenAI
         return instructor.from_openai(
-            AsyncOpenAI(base_url=base_url, api_key=api_key),
+            AsyncOpenAI(base_url=v1_url, api_key=api_key),
             mode=mode
         )
     elif provider_type == "anthropic":
@@ -46,7 +49,7 @@ async def get_available_models() -> List[str]:
     # noinspection PyBroadException
     try:
         from openai import AsyncOpenAI
-        async with AsyncOpenAI(base_url=base_url, api_key=api_key) as raw_client:
+        async with AsyncOpenAI(base_url=v1_url, api_key=api_key) as raw_client:
             answer = await raw_client.models.list()
             return [model.id for model in answer.data]
     except Exception:

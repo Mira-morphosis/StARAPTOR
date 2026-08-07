@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "evaluator"
+name = "analyzer"
 version = "0.1.0"
 description = ""
 authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
@@ -7,13 +7,16 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.13"
-instructor = "^1.15.4"
+storage = { path = "../storage", develop = true }
 python-dotenv = "^1.2.2"
-anthropic = "^0.115.0"
-openai = "^2.44.0"
-pydantic = "^2.13.4"
-requests = "^2.34.2"
-tqdm = "^4.69.1"
+pandas = "^3.0.3"
+mlxtend = "^0.25.0"
+pandas-stubs = "~=3.0.3"
+scikit-learn = "^1.9.0"
+numpy = "^2.5.1"
+statsmodels = "^0.14.6"
+xgboost = "^3.3.0"
+optuna = "^4.9.0"
 
 
 [build-system]

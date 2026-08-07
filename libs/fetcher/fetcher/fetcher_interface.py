@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import random
 from typing import AsyncGenerator
+from pandas import DataFrame, to_datetime
 
 import httpx
 
@@ -190,6 +191,12 @@ async def fetch_review_history(
     Loops backward day by day, fetching reviews for each day up to max_days,
     and aggregates them into a single list.
     """
+
+    #Until a better KPI API is found, this is a limit we have to bear with.
+    HARD_LIMIT_DAYS = 140
+    if max_days is None or max_days > HARD_LIMIT_DAYS:
+        max_days = HARD_LIMIT_DAYS
+
     all_reviews = []
     known_ids = existing_ids or set()
     history_cursor = "*"
@@ -297,3 +304,37 @@ def clean_and_flatten_review(review_dict: dict) -> dict:
         })
 
     return cleaned
+
+async def fetch_kpi(app_id:int) -> DataFrame:
+    url = f"https://steamcharts.com/app/{app_id}/chart-data.json"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        raw_data = response.json()  # Expected format: [[timestamp_ms, player_count], ...]
+        if not raw_data:
+            return DataFrame()
+        df = DataFrame(raw_data, columns=["timestamp", "players"])
+        df["date"] = to_datetime(df["timestamp"], unit="ms", utc=True).dt.date
+        daily = df.groupby("date")["players"].agg(
+            mean_concurrent="mean",
+            median_concurrent="median",
+            peak_concurrent="max",
+            min_concurrent="min"
+        ).reset_index()
+        daily = daily.sort_values("date").reset_index(drop=True)
+        daily["pct_change"] = daily["peak_concurrent"].pct_change() * 100.0
+        daily["pct_change"] = daily["pct_change"].fillna(0.0)
+
+        def categorize_trend(pct: float) -> str:
+            if pct >= 5.0:
+                return "retention_growth"
+            elif pct <= -5.0:
+                return "retention_drop"
+            else:
+                return "retention_stable"
+
+        daily["trend"] = daily["pct_change"].apply(categorize_trend)
+        return daily

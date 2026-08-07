@@ -1,7 +1,9 @@
 import datetime
 
-from fetcher.fetcher_interface import fetch_review_history
-from storage.storage_utils import get_existing_review_ids, insert_reviews
+from pandas import DataFrame
+
+from fetcher.fetcher_interface import fetch_review_history, fetch_kpi
+from storage.storage_utils import get_existing_review_ids, insert_reviews, insert_daily_kpis, get_existing_kpi_dates
 from evaluator.evaluator_interface import ReviewProcessor
 
 
@@ -52,3 +54,60 @@ async def review_updater(
             print(f"Total time required: {(datetime.datetime.now() - time_start).total_seconds()}") 
     elif verbose:
         print("All fetched reviews were skipped after spam filtering.")
+
+
+async def kpi_updater(
+    app_id: int,
+    max_days: int | None = None,
+    verbose: bool = False
+):
+    """
+    Fetches historical KPI data from SteamCharts, filters out duplicate dates,
+    trims to max_days if specified, and inserts missing records into DuckDB.
+    """
+
+    # Until a better KPI API is found, this is a limit we have to bear with.
+    HARD_LIMIT_DAYS = 140
+    if max_days is None or max_days > HARD_LIMIT_DAYS:
+        max_days = HARD_LIMIT_DAYS
+
+    try:
+        stored_dates = get_existing_kpi_dates(app_id)
+    except NotADirectoryError as e:
+        print(f"FATAL: {e}")
+        exit(1)
+
+    time_start = datetime.datetime.now()
+    if verbose:
+        print(f"Starting historical KPI fetch for App ID {app_id}...")
+
+    # Fetch daily aggregated KPIs
+    kpi_df: DataFrame = await fetch_kpi(app_id)
+
+    if kpi_df.empty:
+        if verbose:
+            print("No KPI data returned from fetcher.")
+        return
+
+    # Filter out dates that are already in DuckDB
+    if stored_dates:
+        kpi_df = kpi_df[~kpi_df["date"].isin(stored_dates)]
+
+    # Slice to the requested lookback window (if max_days is defined)
+    if max_days is not None and not kpi_df.empty:
+        kpi_df = kpi_df.sort_values("date").tail(max_days)
+
+    if kpi_df.empty:
+        if verbose:
+            print("KPI database is already up to date. No new records to insert.")
+        return
+
+    if verbose:
+        print(f"Storing {len(kpi_df)} missing daily KPI snapshots...")
+
+    insert_daily_kpis(app_id, kpi_df)
+
+    if verbose:
+        elapsed = (datetime.datetime.now() - time_start).total_seconds()
+        print(f"Successfully stored {len(kpi_df)} daily KPI records into DuckDB.")
+        print(f"Total time required: {elapsed:.2f}s")
