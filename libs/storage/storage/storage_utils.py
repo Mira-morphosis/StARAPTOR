@@ -4,10 +4,10 @@ import os
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Final, Generator, Optional, Tuple
+from typing import Any, Dict, Final, Generator, Optional
 
 from dotenv import load_dotenv
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 load_dotenv()
 DB_ROOT: Final = os.getenv("STARAPTOR_DB_ROOT", "~/.staraptor/")
@@ -16,7 +16,11 @@ import duckdb
 
 
 def _resolve_db_path(app_id: int) -> Path:
-    """Resolves DB Path and implements fallbacks"""
+    """
+    Resolves the DuckDB file path for an app, falling back to defaults if unset.
+    :param app_id: The Steam unique identifier for the application.
+    :return: The resolved Path to the app's .db file.
+    """
     if DB_ROOT is None:
         print("W: .env is missing or is not set up correctly. Forcing defaults... (~/.staraptor/)")
         default_folder = Path("~/.staraptor/").expanduser()
@@ -26,7 +30,6 @@ def _resolve_db_path(app_id: int) -> Path:
     db_folder = Path(DB_ROOT).expanduser()
 
     if db_folder.exists() and not db_folder.is_dir():
-        # Fatal error raised for the handler
         raise NotADirectoryError(f"{DB_ROOT} is not a valid folder.")
 
     if not db_folder.exists():
@@ -37,7 +40,11 @@ def _resolve_db_path(app_id: int) -> Path:
 
 @contextmanager
 def db_connection(app_id: int) -> Generator[duckdb.DuckDBPyConnection, None, None]:
-    # If raises NotADirectoryError, the exception is passed to the caller.
+    """
+    Opens a DuckDB connection for an app's database, closing it on exit.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A context manager yielding an open DuckDBPyConnection.
+    """
     db_path = _resolve_db_path(app_id)
 
     conn = duckdb.connect(str(db_path))
@@ -48,16 +55,25 @@ def db_connection(app_id: int) -> Generator[duckdb.DuckDBPyConnection, None, Non
 
 
 def get_existing_review_ids(app_id: int) -> set[str]:
+    """
+    Fetches the set of review ids already stored for an app.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A set of recommendationid strings (empty if the table doesn't exist yet).
+    """
     with db_connection(app_id) as conn:
         try:
             cursor = conn.execute("SELECT recommendationid FROM reviews")
             return {str(row[0]) for row in cursor.fetchall()}
-        except duckdb.CatalogException:  #CatalogException = Database is created already
+        except duckdb.CatalogException:  # Table doesn't exist yet
             return set()
 
 
 def _init_reviews_db(conn: duckdb.DuckDBPyConnection) -> None:
-    """Initializes the review table"""
+    """
+    Creates the reviews table if it doesn't already exist.
+    :param conn: An open DuckDB connection.
+    :return: None.
+    """
     conn.execute("""
                  CREATE TABLE IF NOT EXISTS reviews
                  (
@@ -101,7 +117,10 @@ def _init_reviews_db(conn: duckdb.DuckDBPyConnection) -> None:
 
 def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
     """
-    Stores the JSON reviews into the app database.
+    Stores new reviews into the app's database, ignoring duplicates by primary key.
+    :param app_id: The Steam unique identifier for the application.
+    :param new_reviews: A list of review dicts, or a JSON string encoding one.
+    :return: None.
     """
     if not new_reviews:
         return
@@ -115,10 +134,9 @@ def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
     if not reviews_list:
         return
 
-        # We extract keys from the first element of the list
     columns = list(reviews_list[0].keys())
 
-    # Placeholders are prepared so that DuckDB can dynamically build the query (e.g., $recommendationid, $review, ...)
+    # Placeholders let DuckDB bind dict keys directly (e.g. $recommendationid, $review, ...)
     placeholders = ", ".join([f"${col}" for col in columns])
 
     query = f"""
@@ -130,7 +148,6 @@ def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
         _init_reviews_db(conn)
 
         try:
-            # DuckDB automatically maps the $column keys
             conn.executemany(query, reviews_list)
 
         except Exception as e:
@@ -140,6 +157,12 @@ def insert_reviews(app_id: int, new_reviews: list[dict] | str) -> None:
 
 
 def export(app_id: int, path:Path):
+    """
+    Exports the reviews table for an app to a CSV file.
+    :param app_id: The Steam unique identifier for the application.
+    :param path: The target directory; the file is named "{app_id}.csv".
+    :return: None.
+    """
     with db_connection(app_id) as conn:
         try:
             conn.execute(f"COPY reviews TO '{str(path.expanduser().joinpath((str(app_id)+'.csv')))}' (HEADER, DELIMITER ',')")
@@ -148,7 +171,11 @@ def export(app_id: int, path:Path):
 
 
 def _init_kpi_db(conn: duckdb.DuckDBPyConnection) -> None:
-    """Initializes the daily KPIs table."""
+    """
+    Creates the daily_kpis table if it doesn't already exist.
+    :param conn: An open DuckDB connection.
+    :return: None.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS daily_kpis (
             date DATE PRIMARY KEY,
@@ -163,21 +190,29 @@ def _init_kpi_db(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def insert_daily_kpis(app_id: int, kpi_df: DataFrame) -> None:
-    """Stores or updates daily KPI records in DuckDB."""
+    """
+    Stores or updates daily KPI records in DuckDB.
+    :param app_id: The Steam unique identifier for the application.
+    :param kpi_df: A DataFrame matching the daily_kpis schema.
+    :return: None.
+    """
     if kpi_df.empty:
         return
 
     with db_connection(app_id) as conn:
         _init_kpi_db(conn)
         try:
-            # DuckDB natively ingests pandas DataFrames directly
             conn.execute("INSERT OR REPLACE INTO daily_kpis SELECT * FROM kpi_df")
         except Exception as e:
             print(f"E: Failed to store KPIs into DuckDB: {e}")
 
 
 def get_daily_kpis_map(app_id: int) -> dict[datetime.date, str]:
-    """Retrieves a map of date -> retention trend for transaction labeling."""
+    """
+    Retrieves a map of date -> retention trend for transaction labeling.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A dict mapping date to trend label (empty if the table doesn't exist yet).
+    """
     with db_connection(app_id) as conn:
         try:
             cursor = conn.execute("SELECT date, trend FROM daily_kpis")
@@ -186,7 +221,11 @@ def get_daily_kpis_map(app_id: int) -> dict[datetime.date, str]:
             return {}
 
 def get_existing_kpi_dates(app_id: int) -> set[datetime.date]:
-    """Returns the set of dates already stored in the daily_kpis table."""
+    """
+    Returns the set of dates already stored in the daily_kpis table.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A set of dates (empty if the table doesn't exist yet).
+    """
     with db_connection(app_id) as conn:
         try:
             cursor = conn.execute("SELECT date FROM daily_kpis")
@@ -196,8 +235,12 @@ def get_existing_kpi_dates(app_id: int) -> set[datetime.date]:
 
 
 def _init_rules_tables(conn: duckdb.DuckDBPyConnection) -> None:
-    """Initializes tables for association rule execution history and rule results."""
-    # Table 1: Run Metadata
+    """
+    Creates the mining_runs and association_rules tables if they don't already exist.
+    :param conn: An open DuckDB connection.
+    :return: None.
+    """
+    # Table 1: run metadata
     conn.execute("""
                  CREATE TABLE IF NOT EXISTS mining_runs
                  (
@@ -222,7 +265,7 @@ def _init_rules_tables(conn: duckdb.DuckDBPyConnection) -> None:
                  )
                  """)
 
-    # Table 2: Mined Association Rules
+    # Table 2: mined association rules
     conn.execute("""
                  CREATE TABLE IF NOT EXISTS association_rules
                  (
@@ -249,16 +292,34 @@ def save_mining_results(
 ) -> str:
     """
     Stores a mining run and its generated rules into DuckDB.
-    Returns the generated run_id.
+    :param app_id: The Steam unique identifier for the application.
+    :param rules_df: The DataFrame of mined association rules.
+    :param metadata: Run metadata; may include "timestamp_end" for historical backfills, or "window_size_days"/"total_reviews".
+    :param params: The mining parameters used (min_support, min_confidence, min_lift, deduplicate_mode).
+    :return: The generated run_id, or "" if rules_df was empty.
     """
     if rules_df.empty:
         print("W: Rules DataFrame is empty. Skipping database insertion.")
         return ""
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    # The run's timestamp must represent the date the rule REFERS TO, not the moment mining
+    # was launched: Analyzer.run_historical() sets metadata["timestamp_end"] (the end of the
+    # historical sliding window). If absent — as in Analyzer.run()'s daily cycle, which
+    # reflects "as of today" — now() is used instead. Without this distinction, a historical
+    # backfill (many runs launched in quick succession) would stack every run_id/timestamp on
+    # the same execution instant instead of spreading across their real historical dates —
+    # and matrix_generator.py, which joins association_rules to KPIs on this column, would
+    # only see non-zero rule_lift_* features on the single day of the backfill, zeroed out
+    # everywhere else.
+    timestamp_end = metadata.get("timestamp_end")
+    if timestamp_end is not None:
+        now = datetime.datetime.fromtimestamp(timestamp_end, tz=datetime.timezone.utc)
+    else:
+        now = datetime.datetime.now(datetime.timezone.utc)
+
     run_id = generate_human_run_id(now)
 
-    # Prepare Run Metadata record
+    # noinspection PyUnusedLocal
     run_record = DataFrame([{
         "run_id": run_id,
         "timestamp": now,
@@ -270,26 +331,24 @@ def save_mining_results(
         "deduplicate_mode": params.get("deduplicate_mode", "both")
     }])
 
-    # Prepare Rules records linked to run_id
+    # noinspection PyUnusedLocal
     df_to_save = rules_df.copy()
     df_to_save["run_id"] = run_id
     df_to_save["rule_id"] = [str(uuid.uuid4()) for _ in range(len(df_to_save))]
 
-    # Ensure column naming matches DuckDB schema
     columns_map = {
         "antecedent support": "antecedent_support",
         "consequent support": "consequent_support"
     }
     df_to_save = df_to_save.rename(columns=columns_map)
 
-    # Select only relevant columns
     rules_columns = [
         "rule_id", "run_id", "antecedents", "consequents",
         "antecedent_support", "consequent_support", "support",
         "confidence", "lift", "leverage", "conviction"
     ]
 
-    # Fill missing metrics if any (e.g., leverage/conviction depending on mlxtend version)
+    # Fill missing metrics if any (e.g. leverage/conviction depending on mlxtend version)
     for col in rules_columns:
         if col not in df_to_save.columns:
             df_to_save[col] = 0.0
@@ -298,15 +357,21 @@ def save_mining_results(
 
     with db_connection(app_id) as conn:
         _init_rules_tables(conn)
-        # Insert Run metadata
+        # NB: 'run_record' and 'df_to_save' are not passed explicitly to conn.execute() —
+        # DuckDB resolves FROM table names by looking up variables with that name in the
+        # calling Python scope (relation API). They are referenced by name inside the SQL
+        # string, not unused; some IDEs flag this as a false positive.
         conn.execute("INSERT INTO mining_runs SELECT * FROM run_record")
-        # Insert batch of Rules directly from Pandas DataFrame
         conn.execute("INSERT INTO association_rules SELECT * FROM df_to_save")
 
     return run_id
 
 def list_mining_runs(app_id: int) -> DataFrame:
-    """Returns a clean overview of all mining runs sorted by most recent."""
+    """
+    Returns a clean overview of all mining runs sorted by most recent.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A DataFrame with run metadata and total rule counts.
+    """
     with db_connection(app_id) as conn:
         query = """
             SELECT 
@@ -325,26 +390,37 @@ def list_mining_runs(app_id: int) -> DataFrame:
         return conn.execute(query).df()
 
 def generate_human_run_id(timestamp: datetime.datetime) -> str:
-    """Generates an ID like: run_20260724_105626_a3f1"""
+    """
+    Generates a human-readable run id from a timestamp.
+    :param timestamp: The timestamp the run id should encode.
+    :return: An id like "run_20260724_105626_a3f1".
+    """
     time_str = timestamp.strftime("%Y%m%d_%H%M%S")
     short_hash = uuid.uuid4().hex[:4]
     return f"run_{time_str}_{short_hash}"
 
 def get_latest_run_id(app_id: int) -> str | None:
-    """Fetches the run_id of the most recent mining run."""
+    """
+    Fetches the run_id of the most recent mining run.
+    :param app_id: The Steam unique identifier for the application.
+    :return: The latest run_id, or None if no runs exist.
+    """
     with db_connection(app_id) as conn:
         try:
             row = conn.execute(
                 "SELECT run_id FROM mining_runs ORDER BY timestamp DESC LIMIT 1"
             ).fetchone()
             return row[0] if row else None
-        except Exception:
+        except duckdb.CatalogException:
             return None
 
 
 def export_all_rules(app_id: int, output_dir: str | Path | None = None) -> int:
     """
-    Esporta le regole di TUTTE le run presenti nel DB in file CSV distinti.
+    Exports the association rules of every mining run in the DB to separate CSV files.
+    :param app_id: The Steam unique identifier for the application.
+    :param output_dir: The directory to export CSVs into; defaults to DB_ROOT/exports.
+    :return: The number of runs successfully exported.
     """
     if output_dir is None:
         export_path = Path(DB_ROOT).expanduser() / "exports"
@@ -357,11 +433,11 @@ def export_all_rules(app_id: int, output_dir: str | Path | None = None) -> int:
         try:
             runs = conn.execute("SELECT run_id FROM mining_runs").fetchall()
         except duckdb.CatalogException:
-            print(f"W: Nessuna tabella delle regole trovata per App ID {app_id}.")
+            print(f"W: No rules table found for App ID {app_id}.")
             return 0
 
         if not runs:
-            print(f"[*] Nessuna run trovata nel database per App ID {app_id}.")
+            print(f"[*] No runs found in the database for App ID {app_id}.")
             return 0
 
         exported_count = 0
@@ -369,7 +445,7 @@ def export_all_rules(app_id: int, output_dir: str | Path | None = None) -> int:
             target_file = export_path / f"{app_id}_rules_{run_id}.csv"
             clean_path_str = str(target_file.resolve()).replace("'", "''")
 
-            # Formattazione corretta della query COPY TO senza parametro '?' per il path
+            # No '?' parameter binding for the path here, since COPY TO needs a literal target
             export_query = f"""
                 COPY (
                     SELECT antecedents, consequents, support, confidence, lift, leverage, conviction
@@ -381,36 +457,36 @@ def export_all_rules(app_id: int, output_dir: str | Path | None = None) -> int:
 
             try:
                 conn.execute(export_query)
-                print(f"[✓] Esportata run '{run_id}' in:\n    {target_file}")
+                print(f"[OK] Exported run '{run_id}' to:\n    {target_file}")
                 exported_count += 1
             except Exception as e:
-                print(f"E: Errore durante l'esportazione CSV della run {run_id}: {e}")
+                print(f"E: Error exporting CSV for run {run_id}: {e}")
 
         return exported_count
 
 def clear_mining_rules(app_id: int) -> None:
     """
-    Cancella tutte le regole di associazione e le esecuzioni registrate per un determinato App ID.
+    Deletes all association rules and mining runs recorded for an app.
+    :param app_id: The Steam unique identifier for the application.
+    :return: None.
     """
     with db_connection(app_id) as conn:
         try:
             conn.execute("DELETE FROM association_rules")
             conn.execute("DELETE FROM mining_runs")
-            print(f"[✓] Pulizia completata: cancellate tutte le regole e run precedenti per App ID {app_id}.")
+            print(f"[OK] Cleanup complete: cleared all rules and runs for App ID {app_id}.")
         except duckdb.CatalogException:
-            print(f"[*] Nessuna tabella regole/run da ripulire trovata per App ID {app_id}.")
+            print(f"[*] No rules/runs table found to clean up for App ID {app_id}.")
         except Exception as e:
-            print(f"E: Errore durante la cancellazione delle regole: {e}")
+            print(f"E: Error while deleting rules: {e}")
 
-
-# =====================================================================================
-# HYPERPARAMETER TUNING STORAGE — analoga a mining_runs/association_rules: una tabella
-# per-app_id nello stesso file .db, che tiene traccia degli iperparametri XGBoost
-# ottimizzati per ciascun tier di dimensione dataset (vedi analyzer/tuner.py).
-# =====================================================================================
 
 def _init_tuning_db(conn: duckdb.DuckDBPyConnection) -> None:
-    """Inizializza la tabella degli iperparametri tunati per tier di dimensione dataset."""
+    """
+    Creates the hyperparameter_tuning table if it doesn't already exist.
+    :param conn: An open DuckDB connection.
+    :return: None.
+    """
     conn.execute("""
                  CREATE TABLE IF NOT EXISTS hyperparameter_tuning
                  (
@@ -429,41 +505,76 @@ def _init_tuning_db(conn: duckdb.DuckDBPyConnection) -> None:
                  """)
 
 
+def _safe_float(value: Any, default: float = float("nan")) -> float:
+    """
+    Converts a value to float, explicitly handling None (float(None) would raise TypeError).
+    :param value: The value to convert.
+    :param default: The value to return if `value` is None.
+    :return: The converted float, or `default` if `value` was None.
+    """
+    return float(value) if value is not None else default
+
+
+def serialize_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sanitizes a hyperparameter dict for DuckDB/JSON storage by stripping non-serializable callables.
+    :param params: A dict with "xgb_params" and "decay_params" keys.
+    :return: A dict with the same structure, with any callable "objective" removed from xgb_params.
+    """
+    xgb_params = dict(params.get("xgb_params", {}))
+    decay_params = dict(params.get("decay_params", {}))
+
+    if "objective" in xgb_params and callable(xgb_params["objective"]):
+        xgb_params.pop("objective", None)
+
+    return {
+        "xgb_params": xgb_params,
+        "decay_params": decay_params,
+    }
+
+
 def save_tuned_params(
-    app_id: int,
-    tier_size: int,
-    dataset_size_at_tuning: int,
-    params: Dict[str, Any],
-    metrics: Dict[str, Any],
-    n_trials: int,
-    n_folds: int,
+        app_id: int,
+        tier_size: int,
+        dataset_size_at_tuning: int,
+        params: Dict[str, Any],
+        metrics: Dict[str, Any],
+        n_trials: int,
+        n_folds: int,
 ) -> str:
     """
-    Salva (o sostituisce) gli iperparametri migliori per un dato tier di dimensione
-    dataset. Un solo record per tier viene mantenuto: se il tier esiste già,
-    il vecchio tuning viene sovrascritto da quello nuovo.
+    Saves a tuned hyperparameter record into DuckDB, replacing any prior record for the same tier.
+    :param app_id: The Steam unique identifier for the application.
+    :param tier_size: The dataset-size tier these parameters were tuned for.
+    :param dataset_size_at_tuning: The full dataset size at the time tuning was run.
+    :param params: The hyperparameter dict (see serialize_params for the expected structure).
+    :param metrics: The tuning result metrics (score, mape_multistep_pct, mape_1step_pct, mape_multistep_std).
+    :param n_trials: The number of Optuna trials run.
+    :param n_folds: The number of walk-forward folds used.
+    :return: The generated tuning_id.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     time_str = now.strftime("%Y%m%d_%H%M%S")
     tuning_id = f"tune_{time_str}_{uuid.uuid4().hex[:4]}"
+
+    sanitized_params = serialize_params(params)
 
     record = DataFrame([{
         "tuning_id": tuning_id,
         "tier_size": tier_size,
         "dataset_size_at_tuning": dataset_size_at_tuning,
         "timestamp": now,
-        "params": json.dumps(params),
-        "score": float(metrics.get("score", float("nan"))),
-        "mape_multistep_pct": float(metrics.get("mape_multistep_pct", float("nan"))),
-        "mape_1step_pct": float(metrics.get("mape_1step_pct", float("nan"))),
-        "mape_multistep_std": float(metrics.get("mape_multistep_std", float("nan"))),
+        "params": json.dumps(sanitized_params),
+        "score": _safe_float(metrics.get("score")),
+        "mape_multistep_pct": _safe_float(metrics.get("mape_multistep_pct")),
+        "mape_1step_pct": _safe_float(metrics.get("mape_1step_pct")),
+        "mape_multistep_std": _safe_float(metrics.get("mape_multistep_std")),
         "n_trials": n_trials,
         "n_folds": n_folds,
     }])
 
     with db_connection(app_id) as conn:
         _init_tuning_db(conn)
-        # Un solo record per tier: rimuove il tuning precedente sullo stesso tier, se esiste.
         conn.execute("DELETE FROM hyperparameter_tuning WHERE tier_size = ?", [tier_size])
         conn.execute("INSERT INTO hyperparameter_tuning SELECT * FROM record")
 
@@ -471,7 +582,11 @@ def save_tuned_params(
 
 
 def list_tuning_history(app_id: int) -> DataFrame:
-    """Ritorna lo storico completo dei tuning per l'App ID, ordinato per tier crescente."""
+    """
+    Returns the full tuning history for an app, ordered by increasing tier size.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A DataFrame of tuning records (empty if the table doesn't exist yet).
+    """
     with db_connection(app_id) as conn:
         try:
             return conn.execute(
@@ -481,8 +596,12 @@ def list_tuning_history(app_id: int) -> DataFrame:
             return DataFrame()
 
 
-def get_latest_tuning_record(app_id: int) -> Optional["DataFrame"]:
-    """Ritorna il record di tuning più recente per timestamp (indipendentemente dal tier)."""
+def get_latest_tuning_record(app_id: int) -> Optional["Series"]:
+    """
+    Returns the most recent tuning record by timestamp, regardless of tier size.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A single-row pandas Series, or None if no tuning history exists.
+    """
     history = list_tuning_history(app_id)
     if history.empty:
         return None
@@ -491,10 +610,10 @@ def get_latest_tuning_record(app_id: int) -> Optional["DataFrame"]:
 
 def get_params_for_size(app_id: int, n_samples: int) -> Optional[Dict[str, Any]]:
     """
-    Seleziona gli iperparametri del tier più adatto a n_samples righe correnti.
-    Usa il tier più grande tunato che non supera n_samples; se n_samples è sotto
-    il tier minimo mai tunato, ricade sul tier più piccolo disponibile (cold-start).
-    Ritorna None se non esiste alcun tuning storicizzato per l'App ID.
+    Fetches the best-fit tuned hyperparameters for a given dataset size.
+    :param app_id: The Steam unique identifier for the application.
+    :param n_samples: The current dataset size to find parameters for.
+    :return: The parsed hyperparameter dict for the largest tuned tier not exceeding n_samples (or the smallest tier available if none qualify), or None if no tuning history exists.
     """
     history = list_tuning_history(app_id)
     if history.empty:
@@ -504,4 +623,4 @@ def get_params_for_size(app_id: int, n_samples: int) -> Optional[Dict[str, Any]]
     row = eligible.loc[eligible["tier_size"].idxmax()] if not eligible.empty \
         else history.loc[history["tier_size"].idxmin()]
 
-    return json.loads(row["params"])
+    return json.loads(str(row["params"]))

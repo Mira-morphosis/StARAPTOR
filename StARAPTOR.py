@@ -12,12 +12,14 @@ from analyzer.regressor_tuner import ensure_up_to_date_params, run_tuning_cycle
 from storage.storage_interface import kpi_updater, review_updater
 from storage.storage_utils import DB_ROOT, export_all_rules, clear_mining_rules
 
-# Load environment variables
 load_dotenv()
 
 
 def ensure_export_directory() -> str:
-    """Ensures the default export directory exists before running exports."""
+    """
+    Ensures the default export directory exists before running exports.
+    :return: The resolved export directory path as a string.
+    """
     export_path = Path(DB_ROOT).expanduser() / "exports"
     export_path.mkdir(parents=True, exist_ok=True)
     return str(export_path)
@@ -25,12 +27,16 @@ def ensure_export_directory() -> str:
 
 def run_tuning_pipeline(app_id: int, n_trials: int = 150, force: bool = False, verbose: bool = True):
     """
-    Verifica se gli iperparametri XGBoost sono aggiornati per l'App ID e, se
-    necessario (o se force=True), esegue un nuovo ciclo di tuning walk-forward,
-    salvando i risultati per tier in DuckDB tramite analyzer/tuner.py.
+    Checks whether XGBoost hyperparameters are up to date for the app and, if needed (or if
+    force=True), runs a new walk-forward tuning cycle, saving per-tier results to DuckDB.
+    :param app_id: The Steam unique identifier for the application.
+    :param n_trials: The number of Optuna trials to run per tier.
+    :param force: If True, skips the staleness check and re-tunes every tier regardless.
+    :param verbose: Regulates logging output.
+    :return: None.
     """
     if force:
-        print(f"--- Tuning forzato per App ID {app_id} (tutti i tier mancanti) ---")
+        print(f"--- Forced tuning for App ID {app_id} (all tiers) ---")
         run_tuning_cycle(app_id=app_id, n_trials=n_trials, verbose=verbose)
     else:
         ensure_up_to_date_params(app_id=app_id, n_trials=n_trials, verbose=verbose)
@@ -43,11 +49,13 @@ async def run_initial_pipeline(
     skip_tuning: bool = False,
 ):
     """
-    1. Downloads all historical KPIs for the app.
-    2. Downloads and evaluates all historical reviews.
-    3. Runs the association rule mining algorithm.
-    4. Runs an initial XGBoost hyperparameter tuning cycle for the cold-start
-       dataset tier (skipped if skip_tuning=True).
+    Runs the full cold-start pipeline for a new app: downloads historical KPIs and reviews,
+    mines association rules, and runs an initial hyperparameter tuning cycle.
+    :param app_id: The Steam unique identifier for the application.
+    :param max_days: The maximum number of days to look back for KPIs/reviews; None uses each source's own default limit.
+    :param verbose: Regulates logging output.
+    :param skip_tuning: If True, skips the initial hyperparameter tuning step.
+    :return: None.
     """
     print(f"\n==========================================")
     print(f"  STARTING INITIALIZATION FOR APP ID: {app_id}")
@@ -77,24 +85,24 @@ async def run_initial_pipeline(
 
     # Step 4: Initial hyperparameter tuning for the cold-start dataset tier
     if not skip_tuning:
-        print("\n--- Step 4/4: Tuning Iperparametri XGBoost ---")
+        print("\n--- Step 4/4: Tuning XGBoost Hyperparameters ---")
         try:
             run_tuning_pipeline(app_id=app_id, n_trials=150, force=False, verbose=verbose)
         except Exception as e:
-            print(f"W: Tuning iniziale fallito, si può rilanciare manualmente con --tune: {e}")
+            print(f"W: Initial tuning failed, it can be re-run manually with --tune: {e}")
     else:
-        print("\n--- Step 4/4: Tuning Iperparametri XGBoost (saltato: --skip-tuning) ---")
+        print("\n--- Step 4/4: Tuning XGBoost Hyperparameters (skipped: --skip-tuning) ---")
 
-    print(f"\n[✓] Initialization complete for App ID {app_id}.\n")
+    print(f"\n[OK] Initialization complete for App ID {app_id}.\n")
 
 
 async def run_daily_pipeline(app_id: int, verbose: bool = True):
     """
-    Executes a single update cycle:
-    1. Fetches recent KPI changes.
-    2. Fetches newly added reviews for today.
-    3. Re-runs association rule mining.
-    4. Checks whether hyperparameters need retuning and retunes if so.
+    Runs a single update cycle: refreshes recent KPIs and today's reviews, re-mines
+    association rules, and retunes hyperparameters if they've gone stale.
+    :param app_id: The Steam unique identifier for the application.
+    :param verbose: Regulates logging output.
+    :return: None.
     """
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     print(f"\n[{now}] Executing daily update cycle for App ID: {app_id}...")
@@ -115,20 +123,24 @@ async def run_daily_pipeline(app_id: int, verbose: bool = True):
         save_to_db=True
     )
 
-    # Step 4: Lightweight staleness check — only triggers an actual Optuna run
-    # when the dataset has outgrown the largest tuned tier or params are stale.
-    # Wrapped defensively so a tuning failure never aborts the daily cycle.
+    # Step 4: Lightweight staleness check — only triggers an actual Optuna run when the
+    # dataset has outgrown the largest tuned tier or params are stale. Wrapped defensively so
+    # a tuning failure never aborts the daily cycle.
     try:
         run_tuning_pipeline(app_id=app_id, n_trials=150, force=False, verbose=verbose)
     except Exception as e:
-        print(f"W: Controllo/tuning iperparametri fallito, si riproverà al prossimo ciclo: {e}")
+        print(f"W: Hyperparameter check/tuning failed, will retry next cycle: {e}")
 
     print(f"[{now}] Daily update complete.\n")
 
 
 async def start_daily_scheduler(app_id: int, interval_hours: int = 24, verbose: bool = True):
     """
-    Runs the daily pipeline immediately and then schedules it to repeat every interval_hours.
+    Runs the daily pipeline immediately, then repeats it every interval_hours indefinitely.
+    :param app_id: The Steam unique identifier for the application.
+    :param interval_hours: The number of hours to sleep between pipeline runs.
+    :param verbose: Regulates logging output.
+    :return: None. Runs until interrupted.
     """
     print(f"Starting daily orchestrator daemon for App ID {app_id} (Interval: {interval_hours}h)...")
 
@@ -144,13 +156,14 @@ async def start_daily_scheduler(app_id: int, interval_hours: int = 24, verbose: 
 
 def run_force_mining_pipeline(app_id: int):
     """
-    Cancella tutte le regole/run presenti nel DB per l'App ID e ricalcola
-    il mining su tutto lo storico suddiviso in sliding window.
+    Clears all existing rules/runs for the app and re-mines the full history using sliding windows.
+    :param app_id: The Steam unique identifier for the application.
+    :return: None.
     """
-    # Step 1: Ripulitura regole esistenti
+    # Step 1: Clear existing rules
     clear_mining_rules(app_id)
 
-    # Step 2: Calcolo storico a sliding window
+    # Step 2: Recompute historical sliding-window mining
     analyzer = Analyzer(app_id)
     analyzer.run_historical(
         window_days=14,
@@ -162,6 +175,10 @@ def run_force_mining_pipeline(app_id: int):
     )
 
 def main():
+    """
+    Parses CLI arguments and dispatches to the selected StARAPTOR pipeline.
+    :return: None. Exits the process on completion or on KeyboardInterrupt.
+    """
     parser = argparse.ArgumentParser(description="StARAPTOR")
     parser.add_argument(
         "--app-id",
@@ -189,7 +206,7 @@ def main():
     group.add_argument(
         "--tune",
         action="store_true",
-        help="Verifica se gli iperparametri XGBoost necessitano un aggiornamento e li ritunizza se necessario."
+        help="Check whether XGBoost hyperparameters need updating and retune them if so."
     )
     parser.add_argument(
         "--max-days",
@@ -207,17 +224,17 @@ def main():
         "--n-trials",
         type=int,
         default=150,
-        help="Numero di trial Optuna per tier, usato con --init e --tune (default: 150)."
+        help="Number of Optuna trials per tier, used with --init and --tune (default: 150)."
     )
     parser.add_argument(
         "--skip-tuning",
         action="store_true",
-        help="Salta il tuning automatico degli iperparametri dopo l'inizializzazione (solo con --init)."
+        help="Skip automatic hyperparameter tuning after initialization (only with --init)."
     )
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Usato con --tune: ignora il controllo di staleness e ritunizza tutti i tier mancanti."
+        help="Used with --tune: skip the staleness check and retune all tiers regardless."
     )
     parser.add_argument(
         "--quiet",

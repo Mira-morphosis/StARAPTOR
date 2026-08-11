@@ -3,7 +3,6 @@ from typing import List
 import instructor
 from dotenv import load_dotenv
 
-# Loads .env
 load_dotenv()
 provider_type = os.getenv("STARAPTOR_PROVIDER_TYPE", "openai_compatible").lower()
 base_url = os.getenv("STARAPTOR_BASE_URL") or None
@@ -15,7 +14,8 @@ v1_url = base_url+"v1" if base_url is not None else None
 
 def get_instructor_client():
     """
-    Initializes the Instructor client dynamically based on .env
+    Builds an Instructor-wrapped LLM client based on the configured provider.
+    :return: An Instructor client (OpenAI-compatible or Anthropic backend) ready for structured-output calls.
     """
 
     # Instructor requires an enum, so we convert the string
@@ -38,8 +38,8 @@ def get_instructor_client():
 
 async def get_available_models() -> List[str]:
     """
-    Queries servers using '/models'.
-    If not supported (e.g., Anthropic), uses the fallback defined in .env.
+    Lists models available from the configured provider, falling back to a static list if unsupported.
+    :return: A list of model identifiers, either queried live via '/models' or read from the fallback env var.
     """
     fallback_models = [m.strip() for m in os.getenv("LLM_AVAILABLE_MODELS_FALLBACK", "").split(",") if m.strip()]
 
@@ -53,5 +53,4 @@ async def get_available_models() -> List[str]:
             answer = await raw_client.models.list()
             return [model.id for model in answer.data]
     except Exception:
-        # If it fails, return fallback
         return fallback_models

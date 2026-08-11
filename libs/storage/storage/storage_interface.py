@@ -15,15 +15,25 @@ async def review_updater(
         delay: float = 2.0,
         verbose: bool = False
 ):
+    """
+    Fetches reviews from the last max_days days, runs them through the evaluator, and stores the results.
+    :param app_id: The Steam unique identifier for the application.
+    :param max_days: The maximum number of days to go back to.
+    :param num_reviews: The maximum number of reviews to fetch.
+    :param top_n: The operation will select the top_n best reviews and (num_reviews - top_n) random reviews.
+    :param delay: The delay in seconds between each request.
+    :param verbose: Regulates logging output.
+    :return: None.
+    """
     try:
-        stored_reviews = get_existing_review_ids(app_id) 
-    except NotADirectoryError as e: 
-        print(f"FATAL: {e}") 
-        exit(1) 
+        stored_reviews = get_existing_review_ids(app_id)
+    except NotADirectoryError as e:
+        print(f"FATAL: {e}")
+        exit(1)
 
-    processor = ReviewProcessor() 
+    processor = ReviewProcessor()
 
-    time_start = datetime.datetime.now() 
+    time_start = datetime.datetime.now()
     if verbose:
         print(f"Starting historical fetch for App ID {app_id}...")
 
@@ -43,15 +53,15 @@ async def review_updater(
         return
 
     if verbose:
-        print(f"Processing total history of {len(all_raw_reviews)} items with the evaluator") 
+        print(f"Processing total history of {len(all_raw_reviews)} items with the evaluator")
 
     processed_reviews = await processor.process_batch(all_raw_reviews)
 
     if processed_reviews:
         insert_reviews(app_id, processed_reviews)
         if verbose:
-            print(f"Successfully stored {len(processed_reviews)} filtered reviews into DuckDB.") 
-            print(f"Total time required: {(datetime.datetime.now() - time_start).total_seconds()}") 
+            print(f"Successfully stored {len(processed_reviews)} filtered reviews into DuckDB.")
+            print(f"Total time required: {(datetime.datetime.now() - time_start).total_seconds()}")
     elif verbose:
         print("All fetched reviews were skipped after spam filtering.")
 
@@ -62,11 +72,14 @@ async def kpi_updater(
     verbose: bool = False
 ):
     """
-    Fetches historical KPI data from SteamCharts, filters out duplicate dates,
-    trims to max_days if specified, and inserts missing records into DuckDB.
+    Fetches historical KPI data from SteamCharts and inserts any missing daily records into DuckDB.
+    :param app_id: The Steam unique identifier for the application.
+    :param max_days: The maximum number of days to go back to (capped at 140).
+    :param verbose: Regulates logging output.
+    :return: None.
     """
 
-    # Until a better KPI API is found, this is a limit we have to bear with.
+    # SteamCharts only exposes this much history through the current API.
     HARD_LIMIT_DAYS = 140
     if max_days is None or max_days > HARD_LIMIT_DAYS:
         max_days = HARD_LIMIT_DAYS
@@ -81,7 +94,6 @@ async def kpi_updater(
     if verbose:
         print(f"Starting historical KPI fetch for App ID {app_id}...")
 
-    # Fetch daily aggregated KPIs
     kpi_df: DataFrame = await fetch_kpi(app_id)
 
     if kpi_df.empty:
@@ -89,11 +101,9 @@ async def kpi_updater(
             print("No KPI data returned from fetcher.")
         return
 
-    # Filter out dates that are already in DuckDB
     if stored_dates:
         kpi_df = kpi_df[~kpi_df["date"].isin(stored_dates)]
 
-    # Slice to the requested lookback window (if max_days is defined)
     if max_days is not None and not kpi_df.empty:
         kpi_df = kpi_df.sort_values("date").tail(max_days)
 
