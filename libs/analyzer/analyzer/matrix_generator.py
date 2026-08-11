@@ -5,21 +5,19 @@ from storage.storage_utils import db_connection
 
 
 class MatrixGenerator:
-    """
-    Classe responsabile della generazione e strutturazione della Feature Matrix X
-    e del Vettore Target Y aggregate su base giornaliera.
-    """
+    """Builds the daily feature matrix (X) and forecasting target (Y) used to train the regressor."""
 
     def __init__(self, app_id: int):
         self.app_id = app_id
 
     def build_daily_matrix(self, run_id: Optional[str] = None) -> Tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
         """
-        Estrae i dati da DuckDB e costruisce la matrice di feature giornaliera (X)
-        e il target (Y = mean_concurrent al giorno t+1).
+        Assembles the daily feature matrix and target series from KPI, review, and association-rule data.
+        :param run_id: If provided, only association rules from this mining run are used as features; otherwise all runs are used.
+        :return: A tuple (X, Y, df_clean) where X is the feature matrix, Y is the log-ratio target, and df_clean is the full merged frame (including target_y_abs, kept for evaluation only).
         """
         with db_connection(self.app_id) as conn:
-            # 1. Carica la serie temporale delle KPI giornaliere
+            # 1. Daily KPI time series
             kpi_df: pd.DataFrame = conn.execute("""
                                                 SELECT date, mean_concurrent, pct_change
                                                 FROM daily_kpis
@@ -27,9 +25,9 @@ class MatrixGenerator:
                                                 """).df()
 
             if kpi_df.empty:
-                raise ValueError(f"Nessun dato KPI trovato per l'App ID {self.app_id}.")
+                raise ValueError(f"No KPI data found for App ID {self.app_id}.")
 
-            # 2. Aggrega le recensioni su base giornaliera (12 Pillars + Sentiment Ratio)
+            # 2. Daily review aggregates (12 pillars + sentiment ratio)
             reviews_df: pd.DataFrame = conn.execute("""
                                                     SELECT CAST(to_timestamp(timestamp_updated) AS DATE) AS date,
                     COUNT(*) AS daily_review_count,
@@ -51,7 +49,7 @@ class MatrixGenerator:
                                                     GROUP BY date
                                                     """).df()
 
-            # 3. Carica le regole dall'FP-Growth
+            # 3. FP-Growth association rules
             if run_id:
                 rules_query = """
                               SELECT r.run_id, m.timestamp::DATE as date, r.antecedents, r.consequents, r.lift
@@ -70,28 +68,30 @@ class MatrixGenerator:
                               """
                 rules_df: pd.DataFrame = conn.execute(rules_query).df()
 
-        # Merge KPI e Recensioni
+        # Merge KPI and review data
         df: pd.DataFrame = pd.merge(kpi_df, reviews_df, on="date", how="left").fillna(0)
 
-        # 4. Aggiunta dei Lag Autoregressivi sulla KPI (Tipizzazione esplicita delle colonne)
         kpi_series: pd.Series = df['mean_concurrent']
         df['kpi_lag_1'] = kpi_series.shift(1)
         df['kpi_lag_7'] = kpi_series.shift(7)
+        df['kpi_lag_14'] = kpi_series.shift(14)
 
-        # 1. Rolling Window Statistics (shifted by 1 to prevent data leakage)
+        # Rolling window statistics
         df['kpi_roll_7_mean'] = kpi_series.shift(1).rolling(window=7, min_periods=1).mean()
         df['kpi_roll_7_max'] = kpi_series.shift(1).rolling(window=7, min_periods=1).max()
 
-        # 2. Calendar features
+        # Calendar features
         df['dayofweek'] = df['date'].dt.dayofweek
         df['is_weekend'] = df['dayofweek'].isin([5, 6]).astype(int)
         df['dow_sin'] = np.sin(2 * np.pi * df['dayofweek'] / 7.0)
         df['dow_cos'] = np.cos(2 * np.pi * df['dayofweek'] / 7.0)
 
-        # 3. Peak Interaction Feature: Forces XGBoost to weigh last week's same-day peak when predicting weekends
+        # Peak interaction features
         df['lag7_weekend_interaction'] = df['kpi_lag_7'] * df['is_weekend']
 
-        # 5. Mappatura delle regole come colonne dinamiche
+        df['weekend_boost_ratio'] = (df['kpi_lag_7'] / (df['kpi_roll_7_mean'] + 1e-5)) * df['is_weekend']
+
+        # 5. Pivot association rules into dynamic per-rule columns
         if not rules_df.empty:
             rules_df['rule_feature'] = "rule_lift_" + rules_df['antecedents'].astype(str) + "_->" + rules_df[
                 'consequents'].astype(str)
@@ -104,15 +104,27 @@ class MatrixGenerator:
         df['date'] = pd.to_datetime(df['date'])
 
 
-        # 6. Definizione del Target Y (mean_concurrent del giorno t+1)
+        # 6. Target Y is the log-ratio between tomorrow's and today's KPI level (not the raw level).
+        #
+        # XGBoost is a tree model, so it predicts by averaging training
+        # examples that "look similar": it cannot extrapolate past the largest value it has
+        # ever seen. If we trained directly on player-count levels, the model would be blind
+        # to any peak higher than its training data. A log-ratio ("player count is up 30%")
+        # is a much more repeatable pattern across different absolute scales than "63,552
+        # players exactly", so training on it generalizes better to new highs and lows.
+        # 'target_y_abs' is the actual player-count level, kept only for scoring predictions
+        # afterward, and it must never be used as a training feature.
         target_shift: pd.Series = kpi_series.shift(-1)
-        df['target_y'] = target_shift
+        df['target_y_abs'] = target_shift
+        with np.errstate(divide='ignore', invalid='ignore'):
+            df['target_y'] = np.log(target_shift / kpi_series.replace(0, np.nan))
 
-        # Pulizia righe incomplete a causa dei lags/lead
+        # Drop rows made incomplete by the lag/shift windows above (also drops target_y_abs==0
+        # rows, since a zero level makes the log-ratio NaN/inf).
         df_clean: pd.DataFrame = df.dropna(subset=['target_y']).reset_index(drop=True)
 
-        # Estrazione X e Y
-        ignore_cols = {'date', 'target_y'}
+        # target_y_abs is explicitly excluded from the feature set; it's benchmark()-only.
+        ignore_cols = {'date', 'target_y', 'target_y_abs'}
         feature_cols: List[str] = [str(c) for c in df_clean.columns if c not in ignore_cols]
 
         X: pd.DataFrame = df_clean[feature_cols].copy()

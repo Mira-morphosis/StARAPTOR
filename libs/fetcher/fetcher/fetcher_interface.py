@@ -97,6 +97,15 @@ async def fetch_single_day(
     """
     Yields a sample of num_reviews cleaned reviews or less from a date that contains the top top_n reviews
     plus random reviews.
+    :returns: A tuple consisting of the list of reviews and a cursor
+    :param app_id: The Steam unique identifier for the application.
+    :param target_date: The day targeted by the operation.
+    :param existing_ids: The set of ids of already collected reviews.
+    :param num_reviews: The maximum number of reviews to fetch.
+    :param top_n: The operation will select the top_n best reviews and (num_reviews - top_n) random reviews.
+    :param delay: The delay in seconds between each request
+    :param verbose: Regulates logging output
+    :param cursor: You may pass here a cursor from a precedent function call to avoid fetching the same reviews.
     """
 
     known_ids = existing_ids or set()
@@ -189,7 +198,15 @@ async def fetch_review_history(
 )-> list[dict]:
     """
     Loops backward day by day, fetching reviews for each day up to max_days,
-    and aggregates them into a single list.
+    aggregating them into a single list.
+    :returns: A tuple consisting of the list of reviews and a cursor
+    :param app_id: The Steam unique identifier for the application.
+    :param max_days: The maximum number of days to go back to.
+    :param existing_ids: The set of ids of already collected reviews.
+    :param num_reviews: The maximum number of reviews to fetch.
+    :param top_n: The operation will select the top_n best reviews and (num_reviews - top_n) random reviews.
+    :param delay: The delay in seconds between each request
+    :param verbose: Regulates logging output.
     """
 
     #Until a better KPI API is found, this is a limit we have to bear with.

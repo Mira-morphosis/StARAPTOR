@@ -6,7 +6,11 @@ from storage.storage_utils import save_mining_results
 
 
 def _filter_tautologies(rules_df: pd.DataFrame) -> pd.DataFrame:
-    """Rimuove regole circolari o tautologiche."""
+    """
+    Removes rules whose antecedent and consequent are identical (circular/tautological rules).
+    :param rules_df: The rules' DataFrame to filter.
+    :return: The filtered DataFrame.
+    """
     valid_indices = []
     for idx, row in rules_df.iterrows():
         ants = set(row['antecedents'])
@@ -18,9 +22,10 @@ def _filter_tautologies(rules_df: pd.DataFrame) -> pd.DataFrame:
 
 def _filter_trivial_hardware_rules(rules_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Rimuove le regole composte ESCLUSIVAMENTE da attributi hardware sia negli antecedenti
-    sia nei conseguenti (es. hw_ram_31GB -> hw_vram_16GB), che creano rumore
-    senza offrire insight concreti sul gioco.
+    Removes rules made up entirely of hardware attributes on both sides (e.g. hw_ram_31GB -> hw_vram_16GB),
+    which are noise rather than useful insight about the game itself.
+    :param rules_df: The rules' DataFrame to filter.
+    :return: The filtered DataFrame.
     """
     if rules_df.empty:
         return rules_df
@@ -36,7 +41,7 @@ def _filter_trivial_hardware_rules(rules_df: pd.DataFrame) -> pd.DataFrame:
         all_hardware_ants = all(is_hardware_item(i) for i in ants)
         all_hardware_cons = all(is_hardware_item(i) for i in cons)
 
-        # Mantiene la regola se include ALMENO una feature non hardware (es. review, gameplay, KPI)
+        # Keep the rule if it includes at least one non-hardware feature (review, gameplay, KPI, ...)
         if not (all_hardware_ants and all_hardware_cons):
             valid_indices.append(idx)
 
@@ -44,7 +49,11 @@ def _filter_trivial_hardware_rules(rules_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _prune_itemset_permutations(rules_df: pd.DataFrame) -> pd.DataFrame:
-    """Elimina le permutazioni dello stesso pool di elementi conservando quella a Lift maggiore."""
+    """
+    Collapses different antecedent/consequent permutations of the same item pool to the highest-lift one.
+    :param rules_df: The rules' DataFrame to prune.
+    :return: The pruned DataFrame.
+    """
     if rules_df.empty:
         return rules_df
 
@@ -63,13 +72,15 @@ def _prune_itemset_permutations(rules_df: pd.DataFrame) -> pd.DataFrame:
 
 def _prune_subsup_redundancies(rules_df: pd.DataFrame, min_improvement: float = 0.05) -> pd.DataFrame:
     """
-    Rimuove le regole specializzate (A AND B -> C) se il loro incremento di confidenza
-    rispetto alla regola base (A -> C) è inferiore a min_improvement.
+    Removes specialized rules (A AND B -> C) whose confidence gain over the base rule (A -> C)
+    is smaller than min_improvement.
+    :param rules_df: The rules' DataFrame to prune.
+    :param min_improvement: The minimum confidence gain required to keep a specialized rule.
+    :return: The pruned DataFrame.
     """
     if rules_df.empty:
         return rules_df
 
-    # Lavora temporaneamente coi set per efficienza
     rules_df = rules_df.copy()
     rules_df['ant_set'] = rules_df['antecedents'].apply(lambda x: set(x.split(' AND ')) if isinstance(x, str) else x)
     rules_df['cons_set'] = rules_df['consequents'].apply(lambda x: set(x.split(' AND ')) if isinstance(x, str) else x)
@@ -80,11 +91,8 @@ def _prune_subsup_redundancies(rules_df: pd.DataFrame, min_improvement: float = 
     for i, spec_rule in enumerate(records):
         for j, base_rule in enumerate(records):
             if i != j and i not in indices_to_remove:
-                # Controlla se hanno lo stesso conseguente
                 if spec_rule['cons_set'] == base_rule['cons_set']:
-                    # Controlla se base_rule è un sottoinsieme stretto di spec_rule
                     if base_rule['ant_set'].issubset(spec_rule['ant_set']) and base_rule['ant_set'] != spec_rule['ant_set']:
-                        # Se la regola specializzata NON migliora sufficientemente la confidenza, si marca come ridondante
                         if (spec_rule['confidence'] - base_rule['confidence']) < min_improvement:
                             indices_to_remove.add(i)
                             break
@@ -94,7 +102,11 @@ def _prune_subsup_redundancies(rules_df: pd.DataFrame, min_improvement: float = 
 
 
 def _deduplicate_by_antecedent(rules_df: pd.DataFrame) -> pd.DataFrame:
-    """Mantiene solo la regola a Lift più alto per ciascun antecedente unico."""
+    """
+    Keeps only the highest-lift rule for each unique antecedent.
+    :param rules_df: The rules' DataFrame to deduplicate.
+    :return: The deduplicated DataFrame.
+    """
     if rules_df.empty:
         return rules_df
 
@@ -110,12 +122,25 @@ def _mine_transactions(
         deduplicate_mode: str
 ) -> pd.DataFrame:
     """
-    Motore unico di estrazione: applica FP-Growth e filtraggio su un set di transazioni.
+    Runs FP-Growth association mining on a set of transactions and applies noise-filtering/deduplication.
+
+    FP-Growth finds sets of items that show up together often (frequent itemsets),
+    then turns them into "if you see A, you probably see B" rules. Support is how
+    common an itemset is overall; confidence is how often the rule holds when the antecedent
+    is present; lift is how much more likely the consequent is compared to random chance. It's
+    the same family of algorithm used for market-basket analysis ("customers who bought X also
+    bought Y"), applied here to review attributes instead of products.
+    :param transactions: A list of transactions, each a list of string item tags.
+    :param min_support: The minimum support threshold for frequent itemsets.
+    :param min_confidence: The minimum confidence threshold for generated rules.
+    :param min_lift: The minimum lift threshold for generated rules.
+    :param deduplicate_mode: One of 'itemset', 'antecedent', 'both', or any other value to skip deduplication.
+    :return: A DataFrame of mined association rules, sorted by lift descending.
     """
     if not transactions:
         return pd.DataFrame()
 
-        # Rimuove elementi quasi universali (>95%)
+    # Drop near-universal items (present in >95% of transactions): they carry no signal
     flat_items = [item for t in transactions for item in t]
     item_counts = pd.Series(flat_items).value_counts()
     total_trans = len(transactions)
@@ -125,12 +150,10 @@ def _mine_transactions(
     if not cleaned_transactions:
         return pd.DataFrame()
 
-    # Encoding
     te = TransactionEncoder()
     te_ary = te.fit(cleaned_transactions).transform(cleaned_transactions)
     df_encoded = pd.DataFrame(te_ary, columns=te.columns_)
 
-    # Mining FP-Growth
     frequent_itemsets = fpgrowth(df_encoded, min_support=min_support, use_colnames=True)
     if frequent_itemsets.empty:
         return pd.DataFrame()
@@ -140,11 +163,11 @@ def _mine_transactions(
     if min_lift:
         rules = rules[rules['lift'] >= min_lift]
 
-    # 1. Filtro Tautologie e Correlazioni Puramente Hardware (Rumore Trivial)
+    # Filter out tautologies and pure-hardware noise
     rules = _filter_tautologies(rules)
     rules = _filter_trivial_hardware_rules(rules)
 
-    # 2. Deduplicazione
+    # Deduplicate
     if deduplicate_mode in ['itemset', 'both']:
         rules = _prune_itemset_permutations(rules)
 
@@ -153,7 +176,7 @@ def _mine_transactions(
 
     rules = _prune_subsup_redundancies(rules, min_improvement=0.05)
 
-    # Formattazione finale in stringhe
+    # Format itemsets as sorted, joined strings for storage
     rules['antecedents'] = rules['antecedents'].apply(lambda x: " AND ".join(sorted(list(x))))
     rules['consequents'] = rules['consequents'].apply(lambda x: " AND ".join(sorted(list(x))))
 
@@ -161,6 +184,8 @@ def _mine_transactions(
 
 
 class Analyzer:
+    """Runs FP-Growth association mining over a game's reviews, either as a single pass or across historical windows."""
+
     def __init__(self, app_id: int):
         self.app_id = app_id
         self.standardizer = DataStandardizer(app_id)
@@ -176,7 +201,15 @@ class Analyzer:
             deduplicate_mode='both',
             save_to_db=True
     ):
-        """Esecuzione singola standard (es. per il ciclo daily)."""
+        """
+        Runs a single mining pass over the current best sliding window (used for the daily cycle).
+        :param min_support: The minimum support threshold for frequent itemsets.
+        :param min_confidence: The minimum confidence threshold for generated rules.
+        :param min_lift: The minimum lift threshold for generated rules.
+        :param deduplicate_mode: One of 'itemset', 'antecedent', 'both', or any other value to skip deduplication.
+        :param save_to_db: Whether to persist the resulting rules to DuckDB.
+        :return: A DataFrame of mined association rules (empty if no transactions were found).
+        """
         transactions, metadata = self.standardizer.get_mining_dataset()
         self.metadata = metadata
 
@@ -209,17 +242,26 @@ class Analyzer:
             min_lift=1.2,
             deduplicate_mode='both'
     ) -> list[str]:
-        """Esegue il mining per TUTTE le sliding window definite nello storico."""
+        """
+        Runs mining over every historical sliding window available, saving each run separately.
+        :param window_days: The size in days of each sliding window.
+        :param step_days: The number of days to shift back between consecutive windows.
+        :param min_support: The minimum support threshold for frequent itemsets.
+        :param min_confidence: The minimum confidence threshold for generated rules.
+        :param min_lift: The minimum lift threshold for generated rules.
+        :param deduplicate_mode: One of 'itemset', 'antecedent', 'both', or any other value to skip deduplication.
+        :return: A list of the run_ids that were saved.
+        """
         historical_datasets = self.standardizer.get_historical_sliding_windows(
             window_days=window_days,
             step_days=step_days
         )
-        print(f"[*] Trovate {len(historical_datasets)} sliding window storiche da analizzare.")
+        print(f"[*] Found {len(historical_datasets)} historical sliding windows to analyze.")
 
         saved_runs = []
         for transactions, metadata in historical_datasets:
             label = metadata.get("window_label", "")
-            print(f"--> Mining della finestra {label} ({metadata['total_reviews']} recensioni)...")
+            print(f"--> Mining window {label} ({metadata['total_reviews']} reviews)...")
 
             rules = _mine_transactions(
                 transactions, min_support, min_confidence, min_lift, deduplicate_mode
@@ -235,5 +277,5 @@ class Analyzer:
                 run_id = save_mining_results(self.app_id, rules, metadata, params)
                 saved_runs.append(run_id)
 
-        print(f"\n[✓] Mining storico completato: salvate {len(saved_runs)} run nel DB.")
+        print(f"\n[✓] Historical mining complete: saved {len(saved_runs)} runs to the DB.")
         return saved_runs

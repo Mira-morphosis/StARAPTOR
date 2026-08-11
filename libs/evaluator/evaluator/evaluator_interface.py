@@ -52,6 +52,10 @@ SYSTEM_PROMPT = (
     "6. 'actuallyRecommendsTitle' must strictly match the review text's sentiment, ignoring Steam's official recommendation status."
 )
 def count_prompt_tokens() -> int:
+    """
+    Counts how many tokens the system prompt consumes on the configured server.
+    :return: The token count for SYSTEM_PROMPT, as reported by the '/tokenize' endpoint.
+    """
     response = requests.post(
         url = base_url+"tokenize",
         json = {"content": SYSTEM_PROMPT}
@@ -61,22 +65,30 @@ def count_prompt_tokens() -> int:
     return len(tokens)
 
 class ReviewProcessor:
+    """Runs Steam reviews through an LLM to extract structured per-aspect scores, filtering out spam."""
+
     def __init__(self):
         self.client = get_instructor_client()
         concurrency_limit = int(os.getenv("STARAPTOR_CONCURRENCY_LIMIT", "100"))
         self.semaphore = asyncio.Semaphore(concurrency_limit)
 
     async def _analyze_single(self, model: str, review: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Sends a single review to the LLM and merges the extracted scores back into it.
+        :param model: The model identifier to use for this request.
+        :param review: The raw review dict; must contain a "review" text field.
+        :return: The review dict merged with extracted fields, or None if empty, spam, or on failure.
+        """
         review_text = review.get("review", "").strip()
         if not review_text:
             return None
 
         async with self.semaphore:
             try:
-                # Use the Union type here
+                # Instructor handles picking the right schema based on the response
                 result: ReviewResponse = await self.client.chat.completions.create(
                     model=model,
-                    response_model=ReviewResponse,  # Instructor handles the choice dynamically
+                    response_model=ReviewResponse,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": f"Review text to analyze:\n{review_text}"}
@@ -93,7 +105,6 @@ class ReviewProcessor:
 
                 res_dict = result.model_dump()
 
-                # If it matched the SpamReview schema, discard immediately
                 if res_dict.get("isSpam") is True:
                     return None
 
@@ -103,6 +114,11 @@ class ReviewProcessor:
                 return None
 
     async def process_batch(self, reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Analyzes a batch of reviews concurrently and filters out spam/failed items.
+        :param reviews: The list of raw review dicts to process.
+        :return: The list of successfully analyzed, non-spam reviews with extracted fields merged in.
+        """
         if not reviews:
             return []
 

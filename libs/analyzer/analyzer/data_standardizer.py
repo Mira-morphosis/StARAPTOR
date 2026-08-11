@@ -14,18 +14,23 @@ MAX_LOOKBACK_DAYS = min(int(os.getenv("STARAPTOR_MAX_LOOKBACK_DAYS", 140)), 140)
 
 
 class DataStandardizer:
+    """Converts raw stored reviews into the transaction format used by the association-rule miner."""
+
     def __init__(self, app_id: int):
         self.app_id = app_id
         self.kpi_map = get_daily_kpis_map(app_id)
 
     @property
     def sliding_window_size(self) -> Tuple[int, int]:
+        """
+        Finds the smallest lookback window (in days) that contains at least MIN_REVIEWS_THRESHOLD reviews.
+        :return: A tuple (window_days, cutoff_timestamp) describing the chosen window.
+        """
         now = datetime.datetime.now(datetime.timezone.utc)
         with db_connection(self.app_id) as conn:
             for d in range(CHECK_DAYS_DELTA, MAX_LOOKBACK_DAYS + 1, CHECK_DAYS_DELTA):
                 dt_limit = int((now - datetime.timedelta(days=d)).timestamp())
 
-                # FIX 1: Gestione sicura del ritorno di fetchone()
                 row = conn.execute(
                     "SELECT COUNT(*) FROM reviews WHERE timestamp_updated >= ?",
                     [dt_limit]
@@ -44,6 +49,12 @@ class DataStandardizer:
             window_days: int = 14,
             step_days: int = 7
     ) -> list[Tuple[list[list[str]], dict[str, Any]]]:
+        """
+        Builds a series of overlapping historical windows of transactions for backfilling mining runs.
+        :param window_days: The size in days of each window.
+        :param step_days: The number of days to shift back between consecutive windows.
+        :return: A list of (transactions, metadata) tuples, one per window that met MIN_REVIEWS_THRESHOLD.
+        """
         now = datetime.datetime.now(datetime.timezone.utc)
         max_limit_ts = int((now - datetime.timedelta(days=MAX_LOOKBACK_DAYS)).timestamp())
 
@@ -88,6 +99,11 @@ class DataStandardizer:
         return datasets
 
     def get_window_review_list(self, begin_timestamp: int) -> list[dict[str, Any]]:
+        """
+        Fetches all non-spam reviews updated on or after the given timestamp.
+        :param begin_timestamp: The Unix timestamp lower bound.
+        :return: A list of review records as dicts.
+        """
         with db_connection(self.app_id) as conn:
             cursor = conn.execute("""
                                   SELECT *
@@ -101,6 +117,11 @@ class DataStandardizer:
 
     @staticmethod
     def discretize_playtime(minutes: int) -> str:
+        """
+        Buckets a raw playtime-at-review value into a coarse playtime category.
+        :param minutes: Playtime in minutes at the time the review was written.
+        :return: A category label string.
+        """
         if minutes < 120:
             return "playtime_refund_zone"
         elif minutes < 600:
@@ -113,6 +134,17 @@ class DataStandardizer:
             return "playtime_hardcore"
 
     def transactional(self, review: dict[str, Any]) -> list[str]:
+        """
+        Converts a single review record into a "transaction": a list of categorical item tags.
+
+        Armchair rundown: association-rule mining (the FP-Growth step later in the pipeline)
+        works on "shopping basket" data — each transaction is a set of items, and the miner
+        looks for items that tend to appear together. Here, each review is a basket, and its
+        items are things like "gameplay_4", "voted_up_True", or "playtime_casual". This
+        function is what turns a review row into that basket.
+        :param review: A single review record as a dict.
+        :return: A list of string tags representing this review's basket items.
+        """
         transaction = []
 
         pillars = [
@@ -135,7 +167,6 @@ class DataStandardizer:
             if v is not None:
                 transaction.append(f"{field}_{v}")
 
-        # FIX 2: Conversione sicura di playtime (SupportsInt)
         playtime = review.get("playtime_at_review")
         if playtime is not None:
             transaction.append(self.discretize_playtime(int(str(playtime))))
@@ -144,14 +175,12 @@ class DataStandardizer:
         if lang:
             transaction.append(f"lang_{lang}")
 
-        # FIX 3: Type annotation esplicito su str per abilitare .replace() senza warning
         if review.get("has_hardware_info"):
             for hw_col in ["hw_ram", "hw_vram", "hw_os"]:
                 val: Optional[str] = review.get(hw_col)
                 if isinstance(val, str) and val not in ("N/A", "Unknown"):
                     transaction.append(f"{hw_col}_{val.replace(' ', '_')}")
 
-        # FIX 4: Conversione sicura a float per il timestamp (SupportsFloat)
         ts = review.get("timestamp_updated")
         if ts is not None:
             review_date = datetime.datetime.fromtimestamp(float(str(ts)), tz=datetime.timezone.utc).date()
@@ -162,6 +191,10 @@ class DataStandardizer:
         return transaction
 
     def get_mining_dataset(self) -> Tuple[list[list[str]], dict[str, Any]]:
+        """
+        Builds the transaction list and metadata for the current best sliding window.
+        :return: A tuple (transactions, metadata) ready to be passed into the FP-Growth miner.
+        """
         reviews = self.get_window_review_list(self.sliding_window_size[1])
         transactions = [self.transactional(r) for r in reviews]
 
