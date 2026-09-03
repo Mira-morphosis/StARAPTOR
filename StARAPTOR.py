@@ -181,6 +181,7 @@ def main():
     :return: None. Exits the process on completion or on KeyboardInterrupt.
     """
     parser = argparse.ArgumentParser(description="StARAPTOR")
+
     parser.add_argument(
         "--app-id",
         type=int,
@@ -252,6 +253,12 @@ def main():
         action="store_true",
         help="Clear existing rules in DB and re-mine full history using sliding windows."
     )
+
+    # If no CLI arguments are provided, display --help by default
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
     verbose = not args.quiet
 
