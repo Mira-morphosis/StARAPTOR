@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.13"
@@ -11,8 +12,6 @@ python-dotenv = "^1.2.2"
 storage = { path = "libs/storage", develop = true }
 analyzer = { path = "libs/analyzer", develop = true }
 
-[tool.poetry-workspace-plugin]
-workspaces = {fetcher = "libs/fetcher", storage = "libs/storage", evaluator = "libs/evaluator", analyzer = "libs/analyzer"}
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
