@@ -51,9 +51,12 @@ Poetry 2.x natively handles local directory dependencies without requiring exter
 `poetry install`
 
 #### 4. Configure Environment Variables
-Copy or create a `.env` file in the project root to set up required API keys or environment flags:
+Edit the `.env` file in the project root to set up required API keys or environment flags.
 
-`cp .env.example .env`  # Edit .env with your actual parameters/API keys
+You may restore the default values anytime using:
+
+`cp .env.example .env` 
+>Edit .env with your actual parameters/API keys
 
 #### 5. CLI Executable Link (Optional)
 The repository includes a pre-configured `staraptor` executable script wrapper in the root directory. You can optionally create a symlink to run `staraptor` from anywhere on your system:
