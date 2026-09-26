@@ -1,8 +1,8 @@
 import asyncio
 import csv
+from fetcher.fetcher_interface import fetch_today
 from pathlib import Path
 
-from fetcher.fetcher_interface import fetch_today
 
 async def test():
     try:

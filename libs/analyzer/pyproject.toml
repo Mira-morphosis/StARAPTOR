@@ -3,7 +3,7 @@ name = "analyzer"
 version = "0.1.0"
 description = ""
 authors = ["Maria <a.vicidomini36@studenti.unisa.it>"]
-readme = "README.md"
+packages = [{include = "analyzer", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.13"

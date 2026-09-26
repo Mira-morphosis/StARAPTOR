@@ -1,11 +1,11 @@
-import sys
-from pathlib import Path
-from typing import Optional
 import pandas as pd
-from xgboost import XGBRegressor
-
+import sys
 from analyzer.regressor import Regressor
 from analyzer.regressor_tuner import resolve_params
+from pathlib import Path
+from typing import Optional
+from xgboost import XGBRegressor
+
 
 def run_regressor_test(
     app_id: int,

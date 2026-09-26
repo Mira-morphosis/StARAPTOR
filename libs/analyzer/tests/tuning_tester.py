@@ -1,11 +1,10 @@
 import sys
 import time
-from typing import Any, Dict, Optional
-from xgboost import XGBRegressor
-
 from analyzer.regressor import Regressor
 from analyzer.regressor_tuner import resolve_params, run_tuning_cycle, _normalize_params, _format_duration
 from storage.storage_utils import get_params_for_size
+from typing import Any, Dict, Optional
+from xgboost import XGBRegressor
 
 
 def run_tuning_tester(

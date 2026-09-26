@@ -1,10 +1,10 @@
-import sys
-from typing import Any, Dict, Optional, Tuple
 import pandas as pd
-from xgboost import XGBRegressor
-
+import sys
 from analyzer.regressor import Regressor
 from analyzer.regressor_tuner import resolve_params
+from typing import Any, Dict, Optional, Tuple
+from xgboost import XGBRegressor
+
 
 def run_regressor_benchmark(
     app_id: int,

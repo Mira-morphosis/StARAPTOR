@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# Risolve eventuali link simbolici per individuare la vera cartella dello script
 SOURCE="${BASH_SOURCE[0]}"
 while [ -h "$SOURCE" ]; do
   DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
@@ -9,5 +8,5 @@ while [ -h "$SOURCE" ]; do
 done
 PROJECT_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
-# Esegue Poetry puntando alla cartella radice del progetto
-poetry --directory "$PROJECT_DIR" run python "$PROJECT_DIR/StARAPTOR.py" "$@"
+
+poetry --directory "$PROJECT_DIR" run python "$PROJECT_DIR/src/StARAPTOR.py" "$@"

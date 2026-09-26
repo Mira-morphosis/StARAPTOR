@@ -11,6 +11,7 @@ python = "^3.13"
 python-dotenv = "^1.2.2"
 storage = { path = "libs/storage", develop = true }
 analyzer = { path = "libs/analyzer", develop = true }
+orchestrator = {path = "libs/orchestrator", develop = true}
 
 [build-system]
 requires = ["poetry-core"]
