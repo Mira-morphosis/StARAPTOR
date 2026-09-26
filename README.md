@@ -108,6 +108,7 @@ Clears existing mined rules in DuckDB and re-computes historical association rul
 Exports all mined rules for the specified App ID from DuckDB to CSV format:
 
 `./staraptor --app-id 1086940 --export`
+
 ---
 ### Configuring StARAPTOR
 Configuration is done by editing `.env`. 
