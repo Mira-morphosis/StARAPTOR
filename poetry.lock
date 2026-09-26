@@ -565,6 +565,20 @@ docs = ["ipython", "matplotlib", "numpydoc", "sphinx"]
 tests = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [[package]]
+name = "dashboard"
+version = "0.1.0"
+description = ""
+optional = false
+python-versions = "^3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.source]
+type = "directory"
+url = "libs/dashboard"
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 description = "Distro - an OS platform information API"
@@ -3271,4 +3285,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "3445ead537d413fa1234d4f164b050f476ce57b3bc47c294b25ace87a9da97c0"
+content-hash = "43e6ed1ae3cfbf58d0e0a30eae0c8c4379ca552816880d40d43855fee87aa965"
