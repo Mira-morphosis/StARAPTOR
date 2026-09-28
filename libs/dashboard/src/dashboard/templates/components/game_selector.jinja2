@@ -1,0 +1,21 @@
+<!-- Template: game_selector.html -->
+<div class="relative flex items-center gap-x-2">
+  <!-- Titolo Corrente e Icona da Steam -->
+  <button onclick="toggleDropdown()" class="flex items-center gap-x-2 hover:opacity-80 transition focus:outline-none">
+    <img src="{{ current_game.icon_url }}" class="size-7 rounded object-cover" alt="{{ current_game.name }}" />
+    <span class="text-white text-base sm:text-lg font-medium leading-[1.2]">{{ current_game.name }}</span>
+    <svg class="size-4 text-white/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+    </svg>
+  </button>
+
+  <!-- Dropdown Popover (generato dai file .db trovati) -->
+  <div id="games-dropdown-menu" class="hidden absolute top-full left-0 mt-2 w-56 bg-[#171d25] border border-white/10 rounded-md shadow-xl z-50 py-1">
+    {% for game in available_games %}
+      <a href="/select-game?db={{ game.db_filename }}"
+         class="flex items-center px-4 py-2 text-sm transition {% if game.is_active %}text-white bg-[#2a475e] font-semibold{% else %}text-white/70 hover:text-white hover:bg-[#2a475e]{% endif %}">
+        {{ game.name }}
+      </a>
+    {% endfor %}
+  </div>
+</div>

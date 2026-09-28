@@ -1,0 +1,29 @@
+<!-- Template: associations_list.html -->
+{% for assoc in associations %}
+  {% set bg_styles = {
+    'warning': 'bg-gradient-to-l from-[#73664b] to-[#73664b]/60',
+    'critical': 'bg-gradient-to-l from-[#602f35] to-[#602f35]/60',
+    'positive': 'bg-[#20384c] hover:bg-[#27445d]',
+    'neutral': 'bg-[#20384c] hover:bg-[#27445d]'
+  } %}
+
+  {% set text_styles = {
+    'warning': 'text-[#e1c48a]',
+    'critical': 'text-[#eea6a6]',
+    'positive': 'text-[#67c1f5]',
+    'neutral': 'text-[#c6d4df]'
+  } %}
+
+  <div
+    class="flex items-center justify-start px-4 sm:px-6 w-full min-h-[48px] py-2.5 rounded cursor-pointer hover:opacity-90 transition {{ bg_styles.get(assoc.category, bg_styles['neutral']) }}"
+    hx-get="/api/reviews?filter={{ assoc.filter_key }}"
+    hx-target="#reviews-modal-container">
+    <span class="{{ text_styles.get(assoc.category, text_styles['neutral']) }} text-xs sm:text-sm lg:text-base leading-[1.3]">
+      {{ assoc.text }}
+    </span>
+  </div>
+{% else %}
+  <div class="px-4 py-3 text-white/50 text-sm italic">
+    No associations found.
+  </div>
+{% endfor %}
