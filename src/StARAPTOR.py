@@ -27,6 +27,7 @@ def main():
     group.add_argument("--tune", action="store_true", help="Check and retune XGBoost hyperparameters.")
     group.add_argument("--export", action="store_true", help="Exports rules found to CSV.")
     group.add_argument("--force-mining", action="store_true", help="Clear rules and re-mine full history.")
+    group.add_argument("--dashboard", action="store_true", help="Launch the web dashboard (uvicorn).")
 
     parser.add_argument("--max-days", type=int, default=None, help="Limit lookback period in days.")
     parser.add_argument("--interval", type=int, default=24, help="Interval in hours for --daily mode.")
@@ -41,6 +42,14 @@ def main():
 
     args = parser.parse_args()
     verbose = not args.quiet
+
+    if args.dashboard:
+        # The dashboard reads its default game from STARAPTOR_APP_ID at import time,
+        # so honor the CLI --app-id (which already falls back to that env var).
+        os.environ["STARAPTOR_APP_ID"] = str(args.app_id)
+        from dashboard.main import run
+        run()
+        return
 
     try:
         if args.init:

@@ -109,6 +109,16 @@ Exports all mined rules for the specified App ID from DuckDB to CSV format:
 
 `./staraptor --app-id 1086940 --export`
 
+#### 7. Web Dashboard (`--dashboard`)
+Launches the web dashboard, a local web UI for monitoring and operating StARAPTOR without touching the terminal. It serves the selected game's forecast chart (next 30 days of predicted mean concurrent players), the mined association rules with a natural-language translation, a browsable review database, and a live banner that shows pipeline progress; you can trigger updates, skip today's update, or disable scheduled updates directly from the page:
+
+`./staraptor --app-id 1086940 --dashboard`
+
+The dashboard listens on port `STARAPTOR_DASHBOARD_PORT` (default **8001**); open it at `http://localhost:8001`.
+The game shown is selected with `--app-id` (or the `STARAPTOR_APP_ID` env var), and can be switched at runtime from the game selector in the header — any app that already has a database under `STARAPTOR_DB_ROOT` appears in the list.
+
+>On first load, if the selected game needs it, the dashboard automatically kicks off the full initialization (or a daily update) in the background; progress is visible in the banner at the top of the page.
+
 ---
 ### Configuring StARAPTOR
 Configuration is done by editing `.env`. 
