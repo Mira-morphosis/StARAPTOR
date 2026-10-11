@@ -723,7 +723,18 @@ async def refresh_data(
 
 def run():
     import uvicorn
-    uvicorn.run("dashboard.main:app", host="0.0.0.0", port=PORT, reload=True)
+    import dashboard
+    # Anchor to the package's own location as resolved by the import system, so
+    # hot-reload watches libs/dashboard/src/dashboard/ (code + templates + static)
+    # no matter which directory this is launched from.
+    reload_dir = Path(dashboard.__file__).resolve().parent
+    uvicorn.run(
+        "dashboard.main:app",
+        host="0.0.0.0",
+        port=PORT,
+        reload=True,
+        reload_dirs=[str(reload_dir)],
+    )
 
 
 if __name__ == "__main__":

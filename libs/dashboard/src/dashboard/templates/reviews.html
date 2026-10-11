@@ -22,7 +22,7 @@ app_id={{ app_id }}{% if has_filter %}&amp;antecedents={{ antecedents | urlencod
     } %}
 
     <!-- TOP BAR: game selector + last updated + refresh -->
-    <header class="flex items-center justify-between px-4 sm:px-5 w-full h-14 bg-[#171d25] border-b border-white/5 relative z-10 shrink-0">
+    <header class="flex items-center justify-between px-4 sm:px-6 w-full min-h-[56px] bg-[#171d25] border-b border-white/5 relative z-10 shrink-0">
 
       <div id="game-selector-container"
         class="relative"
@@ -35,9 +35,9 @@ app_id={{ app_id }}{% if has_filter %}&amp;antecedents={{ antecedents | urlencod
         </div>
       </div>
 
-      <div class="flex items-center gap-x-3 sm:gap-x-4">
+      <div class="flex items-center gap-x-3">
         <div id="last-updated-container"
-             class="flex flex-col items-end"
+             class="flex flex-col items-end sm:items-start"
              hx-get="/api/last-updated?app_id={{ app_id }}"
              hx-trigger="load, updateLastUpdated from:body"
              hx-swap="innerHTML">
@@ -45,11 +45,11 @@ app_id={{ app_id }}{% if has_filter %}&amp;antecedents={{ antecedents | urlencod
           <span class="text-white/70 text-[11px] sm:text-xs leading-[1.1]">--</span>
         </div>
         <button
-          class="flex items-center justify-center size-8 bg-[#1a9fff] hover:bg-[#1582d1] transition rounded-sm cursor-pointer"
+          class="flex items-center justify-center size-7 bg-[#1a9fff] hover:bg-[#1582d1] transition rounded-sm cursor-pointer"
           hx-post="/api/refresh?app_id={{ app_id }}"
           hx-target="none"
           title="Refresh data">
-          <svg class="size-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
           </svg>
         </button>
