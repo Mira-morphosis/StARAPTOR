@@ -70,7 +70,7 @@
 
     <main class="flex-1 w-full max-w-[1920px] mx-auto p-4 sm:p-5 lg:p-6 flex flex-col gap-4">
 
-      <h1 class="text-white font-medium text-base sm:text-lg lg:text-xl leading-tight">
+      <h1 class="text-white font-semibold text-2xl sm:text-3xl leading-[1.2]">
         Dashboard
       </h1>
 
@@ -89,19 +89,16 @@
           </div>
         </div>
 
-        <div class="flex flex-col p-4 sm:p-5 lg:p-6 gap-y-2.5 items-stretch justify-start w-full bg-gradient-to-r from-black/50 to-black/65 min-h-[360px] rounded-lg">
+        <div class="flex flex-col p-4 sm:p-5 lg:p-6 gap-y-2.5 items-stretch justify-start w-full bg-gradient-to-r from-black/50 to-black/65 xl:self-stretch">
 
           <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-1 w-full">
             <div class="text-[#c6d4df]/70 text-xs sm:text-sm font-medium leading-tight">
               Associations found in the reviews:
             </div>
-            <button
-              class="w-full sm:w-auto px-5 py-2 bg-[#1a9fff] hover:bg-[#1582d1] rounded text-white text-xs sm:text-sm leading-tight font-normal transition flex items-center justify-center shrink-0 cursor-pointer"
-              hx-get="/api/reviews?app_id={{ app_id }}"
-              hx-target="#reviews-modal-container"
-              hx-swap="innerHTML">
+            <a href="/reviews?app_id={{ app_id }}"
+              class="w-full sm:w-auto px-5 py-2 bg-[#1a9fff] hover:bg-[#1582d1] rounded text-white text-xs sm:text-sm leading-tight font-normal transition flex items-center justify-center shrink-0 cursor-pointer">
               Read Reviews
-            </button>
+            </a>
           </div>
 
           <div id="associations-list"
@@ -120,7 +117,6 @@
       </div>
     </main>
 
-    <div id="reviews-modal-container"></div>
   </div>
 
   </body>

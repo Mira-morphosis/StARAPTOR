@@ -95,8 +95,9 @@ async def kpi_updater(
     kpi_df: DataFrame = await fetch_kpi(app_id)
 
     if kpi_df.empty:
-        if verbose:
-            print("No KPI data returned from fetcher.")
+        # Always warn: without KPI rows the daily_kpis table is never created,
+        # so every later forecast export for this app fails silently.
+        print(f"W: No KPI data returned from fetcher for App ID {app_id}; daily_kpis was not created/updated.")
         return
 
     if stored_dates:

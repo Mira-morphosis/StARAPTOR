@@ -163,8 +163,7 @@ class OrchestratorService:
                         verbose
                     )
                 except Exception as e:
-                    if verbose:
-                        print(f"W: Forecast CSV export failed: {e}")
+                    print(f"W: Forecast CSV export failed: {e}")
 
                 self._progress = 100
 
@@ -238,8 +237,7 @@ class OrchestratorService:
                         verbose
                     )
                 except Exception as e:
-                    if verbose:
-                        print(f"W: Forecast CSV export failed: {e}")
+                    print(f"W: Forecast CSV export failed: {e}")
 
                 self._progress = 100
 
@@ -328,13 +326,11 @@ class OrchestratorService:
             generator = MatrixGenerator(app_id)
             X, Y, df_full = generator.build_daily_matrix()
         except Exception as e:
-            if verbose:
-                print(f"W: Unable to build forecast matrix for App ID {app_id}: {e}")
+            print(f"W: Unable to build forecast matrix for App ID {app_id}: {e}")
             return None
 
         if X.empty or df_full.empty:
-            if verbose:
-                print(f"W: No data available to forecast App ID {app_id}.")
+            print(f"W: No data available to forecast App ID {app_id}.")
             return None
 
         reg = Regressor(app_id=app_id, capacity_mode=True)
@@ -386,8 +382,7 @@ class OrchestratorService:
         )
 
         if forecast_df.empty:
-            if verbose:
-                print(f"W: Empty forecast produced for App ID {app_id}.")
+            print(f"W: Empty forecast produced for App ID {app_id}.")
             return None
 
         forecast_df = forecast_df.copy()
@@ -397,8 +392,7 @@ class OrchestratorService:
         forecast_df = forecast_df[forecast_df["date"] >= today].head(days)
 
         if forecast_df.empty:
-            if verbose:
-                print(f"W: Forecast window is empty after date filtering for App ID {app_id}.")
+            print(f"W: Forecast window is empty after date filtering for App ID {app_id}.")
             return None
 
         out_df = pd.DataFrame({

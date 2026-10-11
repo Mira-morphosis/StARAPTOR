@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reviews - {{ game_name }}</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  </head>
+  <body class="bg-gradient-to-l from-[#1b2838] to-[#223e5a] text-white font-sans antialiased min-h-screen flex flex-col">
+
+    {% macro filter_qs(page=None) -%}
+app_id={{ app_id }}{% if has_filter %}&amp;antecedents={{ antecedents | urlencode }}&amp;consequents={{ consequents | urlencode }}{% endif %}{% if category %}&amp;category={{ category }}{% endif %}{% if page is not none %}&amp;page={{ page }}{% endif %}
+    {%- endmacro %}
+
+    {% set banner_styles = {
+      'warning':  {'bg': 'bg-gradient-to-l from-[#73664b] to-[#73664b]/60', 'text': 'text-[#e1c48a]'},
+      'critical': {'bg': 'bg-gradient-to-l from-[#602f35] to-[#602f35]/60', 'text': 'text-[#eea6a6]'},
+      'positive': {'bg': 'bg-[#20384c]', 'text': 'text-[#67c1f5]'},
+      'neutral':  {'bg': 'bg-[#20384c]', 'text': 'text-[#c6d4df]'}
+    } %}
+
+    <!-- TOP BAR: game selector + last updated + refresh -->
+    <header class="flex items-center justify-between px-4 sm:px-5 w-full h-14 bg-[#171d25] border-b border-white/5 relative z-10 shrink-0">
+
+      <div id="game-selector-container"
+        class="relative"
+        hx-get="/api/current-game?app_id={{ app_id }}"
+        hx-trigger="load"
+        hx-swap="innerHTML">
+        <div class="flex items-center gap-x-2 animate-pulse">
+          <div class="size-6 bg-white/10 rounded"></div>
+          <div class="h-3.5 w-20 bg-white/10 rounded"></div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-x-3 sm:gap-x-4">
+        <div id="last-updated-container"
+             class="flex flex-col items-end"
+             hx-get="/api/last-updated?app_id={{ app_id }}"
+             hx-trigger="load, updateLastUpdated from:body"
+             hx-swap="innerHTML">
+          <span class="text-white font-semibold text-[8px] sm:text-[9px] leading-[1.1]">LAST UPDATED:</span>
+          <span class="text-white/70 text-[11px] sm:text-xs leading-[1.1]">--</span>
+        </div>
+        <button
+          class="flex items-center justify-center size-8 bg-[#1a9fff] hover:bg-[#1582d1] transition rounded-sm cursor-pointer"
+          hx-post="/api/refresh?app_id={{ app_id }}"
+          hx-target="none"
+          title="Refresh data">
+          <svg class="size-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- UPDATE BANNER: shown (between the header and the filter banner) while an update runs -->
+    <div id="scheduled-update-banner"
+         hx-get="/api/banner-status?app_id={{ app_id }}"
+         hx-trigger="load, updateBanner from:body"
+         hx-swap="outerHTML"></div>
+
+    <!-- TITLE ROW: "Reviews" + the rule filter banner (only when a filter is applied) -->
+    <div class="flex items-center justify-between gap-x-4 sm:gap-x-5 px-4 sm:px-5 lg:px-10 w-full h-14 shrink-0">
+      <div class="flex items-center gap-x-3 sm:gap-x-4 shrink-0">
+        <a href="/?app_id={{ app_id }}"
+           class="flex items-center justify-center size-8 rounded text-white/70 hover:text-white hover:bg-white/10 active:text-white transition cursor-pointer"
+           title="Back to dashboard">
+          <svg class="size-6 sm:size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 12H5m0 0l7 7m-7-7l7-7"></path>
+          </svg>
+        </a>
+        <h1 class="text-white font-semibold text-2xl sm:text-3xl leading-[1.2]">Reviews</h1>
+      </div>
+
+      {% if has_filter %}
+      <div class="flex items-center justify-between gap-x-4 sm:gap-x-8 px-4 sm:px-5 flex-1 min-w-0 h-12 bg-[#0c131e] rounded-md border border-white/5">
+        <div class="flex items-center gap-x-3 min-w-0 flex-1">
+          <span class="text-[#67c1f5] text-sm sm:text-base lg:text-lg leading-tight shrink-0 hidden md:inline">Reviews related to:</span>
+          <span class="{{ banner_styles.get(category, banner_styles['neutral'])['bg'] }} {{ banner_styles.get(category, banner_styles['neutral'])['text'] }} text-xs sm:text-sm lg:text-base leading-tight rounded px-3 py-1.5 truncate"
+                title="{{ rule_display }}">
+            {{ rule_display }}
+          </span>
+        </div>
+        <a href="/reviews?app_id={{ app_id }}"
+           class="shrink-0 flex items-center justify-center size-8 rounded text-white/50 hover:text-white hover:bg-white/10 transition cursor-pointer"
+           title="Clear filter and show all reviews">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </a>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- REVIEW LIST -->
+    <main class="flex-1 w-full px-4 sm:px-5 lg:px-10 py-5 flex flex-col">
+      <div class="flex flex-col gap-y-4 sm:gap-y-5 w-full max-w-[1400px] mx-auto items-center">
+
+        {% for rev in reviews_data %}
+          {% include "components/review_card.jinja2" %}
+        {% else %}
+          <div class="py-16 text-center">
+            <p class="text-white/50 italic text-base">No reviews found.</p>
+            {% if has_filter %}
+            <a href="/reviews?{{ filter_qs() }}" class="text-[#67c1f5] hover:underline text-sm mt-2 inline-block">Show all reviews</a>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <!-- PAGINATION (only when the archive outgrows one page) -->
+        {% if total_pages > 1 %}
+        <nav class="flex flex-col sm:flex-row items-center justify-between gap-x-6 gap-y-2 pt-4 w-full border-t border-white/10 text-sm">
+          <span class="text-white/50 text-xs sm:text-sm">
+            Showing {{ (page - 1) * 25 + 1 }}&ndash;{{ [page * 25, total_count] | min }} of {{ total_count }} reviews
+          </span>
+          <div class="flex items-center gap-x-2">
+            {% if page > 1 %}
+            <a href="/reviews?{{ filter_qs(page=page - 1) }}"
+               class="px-4 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white/90 transition cursor-pointer">&larr; Previous</a>
+            {% else %}
+            <span class="px-4 py-1.5 rounded bg-white/5 text-white/30 cursor-default">&larr; Previous</span>
+            {% endif %}
+            <span class="text-white/60 px-2">{{ page }} / {{ total_pages }}</span>
+            {% if page < total_pages %}
+            <a href="/reviews?{{ filter_qs(page=page + 1) }}"
+               class="px-4 py-1.5 rounded bg-white/10 hover:bg-white/20 text-white/90 transition cursor-pointer">Next &rarr;</a>
+            {% else %}
+            <span class="px-4 py-1.5 rounded bg-white/5 text-white/30 cursor-default">Next &rarr;</span>
+            {% endif %}
+          </div>
+        </nav>
+        {% endif %}
+
+      </div>
+    </main>
+  </body>
+</html>

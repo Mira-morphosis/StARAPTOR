@@ -24,7 +24,11 @@ from storage.storage_utils import (
     list_mining_runs,
     DB_ROOT
 )
-from dashboard.rule_translator import translate_rule_to_natural_language, _split_items
+from dashboard.rule_translator import (
+    translate_rule_to_natural_language,
+    _split_items,
+    LANG_NAMES,
+)
 
 app = FastAPI(title="StARAPTOR Dashboard API", version="1.0.0")
 
@@ -43,6 +47,11 @@ STEAM_GAMES_CACHE: Dict[int, Dict[str, str]] = {}
 DAILY_UPDATES_ENABLED: Dict[int, bool] = {}
 TODAY_SKIPPED: Dict[int, str] = {}
 IS_MANUAL_RUN: Dict[int, bool] = {}
+
+# --- Review list display -----------------------------------------------------
+# Page size for the reviews page. The list is paginated server-side so it stays
+# fast no matter how many years of reviews accumulate in the archive.
+REVIEWS_PAGE_SIZE = 25
 
 
 def _latest_forecast_path(app_id: int) -> Path:
@@ -517,16 +526,19 @@ def _tag_to_sql(tag: str):
     return None
 
 
-def build_review_query(antecedents: Optional[str], consequents: Optional[str]):
-    """Build a SQL query for the reviews that make a rule true.
+def build_reviews_filter(antecedents: Optional[str], consequents: Optional[str]):
+    """Translate a rule's itemset into a WHERE clause for the reviews table.
 
-    A rule is "true" for a review when the review's transaction contains every
-    attribute on BOTH sides of the rule (the full itemset). Each tag becomes an
-    AND-ed predicate, so the result is exactly the set of matching reviews.
+    A rule is "true" for a review when the review carries every attribute on
+    BOTH sides of the rule (the full itemset). Each tag becomes an AND-ed
+    predicate, so the result is exactly the set of matching reviews. With no
+    tags (e.g. the unfiltered "Read Reviews" entry point) an empty clause is
+    returned and all reviews are listed.
 
     :param antecedents: The rule's antecedent itemset string (may be empty).
     :param consequents: The rule's consequent itemset string (may be empty).
-    :return: A ``(query, params)`` tuple ready for ``conn.execute``.
+    :return: A ``(where_clause, params)`` tuple; the clause includes the leading
+        ``WHERE`` keyword when non-empty.
     """
     tags = _split_items(antecedents or "") + _split_items(consequents or "")
 
@@ -538,99 +550,159 @@ def build_review_query(antecedents: Optional[str], consequents: Optional[str]):
             conditions.append(frag)
             params.extend(p)
 
-    query = (
-        "SELECT recommendationid FROM reviews"
-    )
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY weighted_vote_score DESC LIMIT 20"
-    return query, params
+    where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    return where_clause, params
 
 
-@app.get("/api/reviews", response_class=HTMLResponse)
-async def get_reviews_modal(
+_REVIEW_COLUMNS = (
+    "recommendationid, review, language, voted_up, weighted_vote_score, "
+    "playtime_at_review, multiplayer, immersion, community, replayability, "
+    "story, monetizationModel, gameplay, controls, graphics, customization, "
+    "audio, difficulty, steam_purchase, received_for_free, primarily_steam_deck, "
+    "isUseful, containsPositiveAspects, containsNegativeAspects, "
+    "actuallyRecommendsTitle, containsBugDescription, timestamp_updated"
+)
+
+
+def _format_review_row(r: tuple) -> dict:
+    """Map one reviews-table row onto the fields the review card renders."""
+    (rid, text, language, voted_up, score, playtime, multiplayer, immersion,
+     community, replayability, story, monetization_model, gameplay, controls,
+     graphics, customization, audio, difficulty, steam_purchase, received_for_free,
+     steam_deck, is_useful, has_positive, has_negative, recommends, reports_bugs,
+     ts) = r
+
+    # "Published 2 Sept." (Steam-style); fall back gracefully for odd timestamps.
+    date_str = ""
+    if ts:
+        try:
+            dt = datetime.fromtimestamp(ts)
+            date_str = f"Published {dt.strftime('%-d %b')}"
+        except Exception:
+            pass
+
+    pillars = [
+        ("Multiplayer", multiplayer),
+        ("Immersion", immersion),
+        ("Community", community),
+        ("Replayability", replayability),
+        ("Story", story),
+        ("Monetization", monetization_model),
+        ("Gameplay", gameplay),
+        ("Controls", controls),
+        ("Graphics", graphics),
+        ("Customization", customization),
+        ("Audio", audio),
+        ("Difficulty", difficulty),
+    ]
+
+    return {
+        "id": rid,
+        "text": text or "",
+        "language": LANG_NAMES.get((language or "").lower(), (language or "").title()),
+        "voted_up": bool(voted_up),
+        "score": round(score or 0.0, 2),
+        "playtime_hours": round((playtime or 0) / 60, 1),
+        "steam_purchase": bool(steam_purchase),
+        "received_for_free": bool(received_for_free),
+        "steam_deck": bool(steam_deck),
+        "is_useful": bool(is_useful),
+        "has_positive": bool(has_positive),
+        "has_negative": bool(has_negative),
+        "recommends": bool(recommends),
+        "reports_bugs": bool(reports_bugs),
+        "pillars": pillars,
+        "date_str": date_str,
+        # Whether any pillar rating is present (drives the ratings strip).
+        "has_pillars": any(v is not None for _, v in pillars),
+    }
+
+
+def fetch_reviews_page(
+    app_id: int,
+    where_clause: str,
+    params: list,
+    page: int,
+    page_size: int = REVIEWS_PAGE_SIZE,
+):
+    """Fetch one page of reviews matching a filter, newest first.
+
+    :return: A ``(rows, total_count)`` tuple where *rows* is a list of dicts
+        shaped by ``_format_review_row`` and *total_count* is the number of
+        reviews matching the whole filter (used for pagination).
+    """
+    offset = max(page - 1, 0) * page_size
+    with db_connection(app_id) as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM reviews{where_clause}", params
+        ).fetchone()[0]
+
+        query = (
+            f"SELECT {_REVIEW_COLUMNS} FROM reviews{where_clause} "
+            "ORDER BY timestamp_updated DESC, recommendationid DESC "
+            f"LIMIT {page_size} OFFSET {offset}"
+        )
+        rows = [_format_review_row(r) for r in conn.execute(query, params).fetchall()]
+
+    return rows, int(total or 0)
+
+
+@app.get("/reviews", response_class=HTMLResponse)
+async def get_reviews_page(
         request: Request,
         app_id: int = DEFAULT_APP_ID,
         antecedents: Optional[str] = Query(None),
-        consequents: Optional[str] = Query(None)
+        consequents: Optional[str] = Query(None),
+        category: Optional[str] = Query(None),
+        page: int = Query(1, ge=1)
 ):
-    game_info = await get_steam_game_info(app_id)
-    game_name = game_info["name"]
+    """The Reviews page.
 
-    # Step 1: resolve which reviews make this rule true. A rule is "true" for a
+    Without ``antecedents``/``consequents`` it lists all of the game's reviews;
+    with them (as linked from an association bar) it lists only the reviews
+    that make that rule true. The filter is carried in the URL, so closing the
+    banner (which links back to the unfiltered page) simply clears it.
+    """
+    game_info = await get_steam_game_info(app_id)
+
+    # Translate the rule's itemset into a WHERE clause. A rule is "true" for a
     # review when the review carries every attribute on BOTH sides of the rule,
     # so we filter on the full itemset (antecedents + consequents).
-    id_query, id_params = build_review_query(antecedents, consequents)
+    where_clause, params = build_reviews_filter(antecedents, consequents)
 
-    review_ids = []
-    with db_connection(app_id) as conn:
-        try:
-            review_ids = [r[0] for r in conn.execute(id_query, id_params).fetchall()]
-        except Exception:
-            logger.exception("Failed to resolve rule-matching reviews.")
+    try:
+        reviews_data, total_count = fetch_reviews_page(app_id, where_clause, params, page)
+    except Exception:
+        logger.exception("Failed to fetch reviews for app %s.", app_id)
+        reviews_data, total_count = [], 0
 
-    # Step 2: fetch the full rows for those ids (keeps weighted-score ordering).
-    reviews_data = []
-    if review_ids:
-        placeholders = ",".join(["?"] * len(review_ids))
-        row_query = f"""
-            SELECT review, \
-                   voted_up, \
-                   weighted_vote_score, \
-                   playtime_at_review,
-                   gameplay, \
-                   community, \
-                   immersion, \
-                   story, \
-                   audio, \
-                   graphics, \
-                   timestamp_updated
-            FROM reviews
-            WHERE recommendationid IN ({placeholders})
-            ORDER BY weighted_vote_score DESC
-        """
-        with db_connection(app_id) as conn:
-            try:
-                rows = conn.execute(row_query, review_ids).fetchall()
-                for r in rows:
-                    date_str = "PUBLISHED RECENTLY."
-                    if r[10]:
-                        try:
-                            dt = datetime.fromtimestamp(r[10])
-                            date_str = f"PUBLISHED {dt.strftime('%d %b').upper()}."
-                        except Exception:
-                            pass
+    # The banner is only shown when a filter is actually applied; otherwise the
+    # page simply lists all reviews.
+    has_filter = bool(antecedents or consequents)
+    rule_display = (
+        translate_rule_to_natural_language(antecedents or "", consequents or "")
+        if has_filter else ""
+    )
 
-                    reviews_data.append({
-                        "text": r[0],
-                        "voted_up": r[1],
-                        "score": round(r[2] or 0.0, 2),
-                        "playtime": round((r[3] or 0) / 60, 1),
-                        "gameplay": r[4],
-                        "community": r[5],
-                        "immersion": r[6],
-                        "story": r[7],
-                        "audio": r[8],
-                        "graphics": r[9],
-                        "date_str": date_str
-                    })
-            except Exception:
-                logger.exception("Failed to fetch rule-matching review rows.")
-
-    # The header shows the FULL rule (antecedent + consequent), since that is
-    # exactly what the filtered list below satisfies.
-    if antecedents or consequents:
-        rule_display = translate_rule_to_natural_language(antecedents or "", consequents or "")
-    else:
-        rule_display = "All Reviews"
+    total_pages = max(1, -(-total_count // REVIEWS_PAGE_SIZE))  # ceil division
+    page = min(page, total_pages)
 
     return templates.TemplateResponse(
         request,
-        "components/reviews_modal.jinja2",
+        "reviews.html",
         {
-            "game_name": game_name,
+            "app_id": app_id,
+            "game_name": game_info["name"],
+            "icon_url": game_info["icon_url"],
+            "has_filter": has_filter,
             "rule_display": rule_display,
-            "reviews_data": reviews_data
+            "antecedents": antecedents or "",
+            "consequents": consequents or "",
+            "category": category or "",
+            "reviews_data": reviews_data,
+            "total_count": total_count,
+            "page": page,
+            "total_pages": total_pages,
         }
     )
 

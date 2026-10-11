@@ -13,7 +13,7 @@ produced by ``data_standardizer.DataStandardizer.transactional``:
 * KPI trend      -> ``kpi_retention_growth``
 
 Each tag is rendered as a past-tense predicate describing what those reviewers
-did / had, so that an itemset reads naturally both on its own (the reviews-modal
+did / had, so that an itemset reads naturally both on its own (the reviews-page
 filter) and inside the full rule sentence.
 """
 import re
@@ -227,7 +227,7 @@ def translate_rule_to_natural_language(antecedents: str, consequents: str, lift:
         When reviewers rated the gameplay 3/5 and wrote in English,
         they also left positive reviews.
 
-    When only the antecedent is supplied (the reviews-modal filter) it returns
+    When only the antecedent is supplied (the reviews-page filter label) it returns
     just the group description, e.g. ``"Reviewers who rated the gameplay 3/5"``.
 
     :param antecedents: Stored antecedent itemset string.
