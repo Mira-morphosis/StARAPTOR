@@ -70,14 +70,14 @@ async def kpi_updater(
     verbose: bool = False
 ):
     """
-    Fetches historical KPI data from SteamCharts and inserts any missing daily records into DuckDB.
+    Fetches historical KPI data from the games-popularity.com API and inserts any missing daily records into DuckDB.
     :param app_id: The Steam unique identifier for the application.
     :param max_days: The maximum number of days to go back to (capped at 140).
     :param verbose: Regulates logging output.
     :return: None.
     """
 
-    # SteamCharts only exposes this much history through the current API.
+    # Keep history bounded so a fresh init stays fast and the regressor trains on recent data.
     HARD_LIMIT_DAYS = 140
     if max_days is None or max_days > HARD_LIMIT_DAYS:
         max_days = HARD_LIMIT_DAYS

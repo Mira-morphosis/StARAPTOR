@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import httpx
+import os
 import random
 from fetcher.fetcher_singleton import fetcher
 from pandas import DataFrame, to_datetime
@@ -321,35 +322,63 @@ def clean_and_flatten_review(review_dict: dict) -> dict:
     return cleaned
 
 async def fetch_kpi(app_id:int) -> DataFrame:
-    url = f"https://steamcharts.com/app/{app_id}/chart-data.json"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        raw_data = response.json()  # Expected format: [[timestamp_ms, player_count], ...]
-        if not raw_data:
-            return DataFrame()
-        df = DataFrame(raw_data, columns=["timestamp", "players"])
-        df["date"] = to_datetime(df["timestamp"], unit="ms", utc=True).dt.date
-        daily = df.groupby("date")["players"].agg(
-            mean_concurrent="mean",
-            median_concurrent="median",
-            peak_concurrent="max",
-            min_concurrent="min"
-        ).reset_index()
-        daily = daily.sort_values("date").reset_index(drop=True)
-        daily["pct_change"] = daily["peak_concurrent"].pct_change() * 100.0
-        daily["pct_change"] = daily["pct_change"].fillna(0.0)
+    """
+    Fetches historical concurrent-player data from the games-popularity.com API.
+    The API returns hourly observations (newest first, paginated via cursor); this
+    aggregates them into one row per day, matching the daily_kpis schema.
+    :param app_id: The Steam unique identifier for the application.
+    :return: A DataFrame with date, mean_concurrent, median_concurrent, peak_concurrent,
+        min_concurrent, pct_change and trend columns (empty if the game is unknown).
+    """
+    base_url = "https://games-popularity.com/swagger/api"
+    api_key = os.getenv("GAMES_POPULARITY_API_KEY")
 
-        def categorize_trend(pct: float) -> str:
-            if pct >= 5.0:
-                return "retention_growth"
-            elif pct <= -5.0:
-                return "retention_drop"
-            else:
-                return "retention_stable"
+    raw_data: list[dict] = []
+    cursor: str | None = None
+    max_pages = 10  # hard cap against runaway pagination (~240 days of hourly data)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for _ in range(max_pages):
+            params: dict[str, str] = {}
+            if api_key:
+                params["apiKey"] = api_key
+            if cursor:
+                params["cursor"] = cursor
+            response = await client.get(
+                f"{base_url}/game/players/{app_id}", params=params
+            )
+            if response.status_code == 404:
+                return DataFrame()
+            response.raise_for_status()
+            payload = response.json()
+            page = payload.get("history", [])
+            raw_data.extend(page)
+            cursor = payload.get("nextCursor")
+            if not cursor or not page:
+                break
 
-        daily["trend"] = daily["pct_change"].apply(categorize_trend)
-        return daily
+    if not raw_data:
+        return DataFrame()
+
+    df = DataFrame(raw_data, columns=["players", "added"])
+    # Timestamps mix ISO variants across pages (some with fractional seconds), so let pandas parse each individually.
+    df["date"] = to_datetime(df["added"], utc=True, format="ISO8601").dt.date
+    daily = df.groupby("date")["players"].agg(
+        mean_concurrent="mean",
+        median_concurrent="median",
+        peak_concurrent="max",
+        min_concurrent="min"
+    ).reset_index()
+    daily = daily.sort_values("date").reset_index(drop=True)
+    daily["pct_change"] = daily["peak_concurrent"].pct_change() * 100.0
+    daily["pct_change"] = daily["pct_change"].fillna(0.0)
+
+    def categorize_trend(pct: float) -> str:
+        if pct >= 5.0:
+            return "retention_growth"
+        elif pct <= -5.0:
+            return "retention_drop"
+        else:
+            return "retention_stable"
+
+    daily["trend"] = daily["pct_change"].apply(categorize_trend)
+    return daily
