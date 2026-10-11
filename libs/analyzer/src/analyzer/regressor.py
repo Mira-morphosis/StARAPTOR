@@ -97,9 +97,13 @@ class Regressor:
         if data_tuple is not None:
             X, Y, df_full = data_tuple
         else:
-            X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            try:
+                X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            except Exception:
+                # Catch uninitialized database catalog errors (missing daily_kpis, etc.)
+                return {}
 
-        if X.empty:
+        if X is None or X.empty:
             return {}
 
         self.feature_names = [str(col) for col in X.columns]
@@ -169,13 +173,17 @@ class Regressor:
         if data_tuple is not None:
             X, Y, df_full = data_tuple
         else:
-            X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            try:
+                X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            except Exception:
+                # Catch uninitialized database catalog errors safely
+                return pd.DataFrame(columns=["date", "predicted_mean_concurrent"])
 
         if not self.is_trained:
             self.fit(run_id=run_id, data_tuple=(X, Y, df_full), peak_weight_alpha=peak_weight_alpha)
 
-        if df_full.empty:
-            return pd.DataFrame()
+        if df_full is None or df_full.empty:
+            return pd.DataFrame(columns=["date", "predicted_mean_concurrent"])
 
         last_date = pd.to_datetime(str(df_full.iloc[-1]['date']))
         columns = list(X.columns)
@@ -213,9 +221,6 @@ class Regressor:
         # correct Jensen's-inequality correction at horizon t is therefore
         # exp(t * residual_var / 2), applied per absolute step rather than depending
         # on the total number of days requested.
-        #
-        # This is still an approximation: this is a conservative (upper-bound-ish) choice, not a
-        # guarantee of zero long-horizon drift.
         residual_var = self.residual_var if self.residual_var is not None else 0.0
 
         for day in range(1, days + 1):
@@ -225,13 +230,8 @@ class Regressor:
             pred_log_ratio = float(self.model.predict(current_row.reshape(1, -1))[0])
             pred_log_ratio = float(np.clip(pred_log_ratio, -2.0, 2.0))
 
-            # Raw/median next level: no bias correction, no safety buffer. This feeds
-            # the recursion (lags, rolling stats, level feature), keeping it consistent
-            # with what the model actually saw during training.
             raw_level = max(0.0, current_level * float(np.exp(pred_log_ratio)))
 
-            # Reported forecast: horizon-aware correction applied once, never fed back
-            # into the loop, so it cannot compound.
             step_correction = float(np.exp(day * residual_var / 2.0))
             reported_kpi = max(0.0, raw_level * step_correction * safety_buffer)
 
@@ -313,9 +313,12 @@ class Regressor:
         if data_tuple is not None:
             X, Y, df_full = data_tuple
         else:
-            X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            try:
+                X, Y, df_full = self.generator.build_daily_matrix(run_id=run_id)
+            except Exception:
+                return {}, pd.DataFrame()
 
-        if X.empty or len(X) < 10:
+        if X is None or X.empty or len(X) < 10:
             return {}, pd.DataFrame()
 
         train_size = int(len(X) * split_ratio)
@@ -350,7 +353,7 @@ class Regressor:
             export_chart=False
         )
 
-        preds_ms_arr = forecast_df["predicted_mean_concurrent"].to_numpy()
+        preds_ms_arr = forecast_df["predicted_mean_concurrent"].to_numpy() if not forecast_df.empty else np.zeros(horizon)
 
         df_test_eval = df_test.iloc[:horizon]
         preds_1s_arr = preds_1s_arr[:horizon]

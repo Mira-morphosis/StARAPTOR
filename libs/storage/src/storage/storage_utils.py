@@ -386,7 +386,10 @@ def list_mining_runs(app_id: int) -> DataFrame:
             GROUP BY m.run_id, m.timestamp, m.total_reviews, m.min_support, m.min_confidence, m.min_lift
             ORDER BY m.timestamp DESC
         """
-        return conn.execute(query).df()
+        try:
+            return conn.execute(query).df()
+        except duckdb.CatalogException:
+            return DataFrame()
 
 def generate_human_run_id(timestamp: datetime.datetime) -> str:
     """

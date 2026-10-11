@@ -14,6 +14,9 @@ analyzer = { path = "libs/analyzer", develop = true }
 orchestrator = {path = "libs/orchestrator", develop = true}
 dashboard = {path = "libs/dashboard", develop = true}
 
+[tool.poetry.scripts]
+start-dashboard = "uvicorn dashboard.main:app"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
