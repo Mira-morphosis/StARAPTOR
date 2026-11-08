@@ -1,37 +1,104 @@
 import asyncio
 import datetime
 import httpx
+import json
 import os
 import random
 from fetcher.fetcher_singleton import fetcher
 from pandas import DataFrame, to_datetime
 from typing import AsyncGenerator
 
+# Statuses worth retrying with backoff before giving up.
+TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 
-async def fetch(fetcher_instance:httpx.AsyncClient, app_id: int, cursor: str = "*") -> tuple[dict, dict, str]:
+
+async def fetch(
+    fetcher_instance: httpx.AsyncClient,
+    app_id: int,
+    cursor: str = "*",
+    max_retries: int = 3,
+    backoff: float = 2.0,
+) -> tuple[dict, dict, str]:
     """
     Fetches Reviews from Steam's store API
     :param fetcher_instance: The client to use
     :param app_id: The game's appid
     :param cursor: (Optional) Continues retrieval from where it stopped.
+    :param max_retries: Attempts on transient server errors (429/5xx) before raising.
+    :param backoff: Base delay in seconds between retries (multiplied by the attempt number).
     :return: The tuple (JSON query summary, JSON review batch, cursor) as [dict, dict, str]
     """
 
-    url = f"https://store.steampowered.com/appreviews/{app_id}"
+    # Valve disabled the old store-domain endpoint (store.steampowered.com/appreviews/<id>?json=1)
+    # on 2026-10-22 — it now 302-redirects every caller to the storefront homepage. The replacement
+    # is the IUserReviewsService WebAPI method, callable without a key, with parameters packed in
+    # an input_json blob and the reply wrapped in a top-level "response" object. The review dicts
+    # and the cursor pagination are unchanged. Note the new API takes NUMERIC enums, not the old
+    # lowercase strings: filter=1 is "Recent" (newest first, like the old filter=recent) — passing
+    # the string "Recent" is silently ignored and returns helpfulness-ordered pages, which breaks
+    # the day-walking stop condition in fetch_single_day.
+    url = "https://api.steampowered.com/IUserReviewsService/GetAppReviews/v1/"
     params = {
-        "json": 1,
-        "filter": "recent",
-        "language": "all",
-        "num_per_page": 100,
-        "cursor": cursor
+        "input_json": json.dumps({
+            "appid": app_id,
+            "filter": 1,            # EUserReviewsAppReviewsFilter.Recent: newest first
+            "languages": ["all"],   # old language=all
+            "purchase_type": 1,     # all purchases, not only Steam
+            "num_per_page": 100,
+            "day_range": 36500,     # no window cap (old endpoint had none); pipeline caps at 140 days
+            "cursor": cursor,
+        })
     }
-    response = await fetcher_instance.get(url, params=params)
-    response.raise_for_status()
-    data = response.json()
+    data = None
+    for attempt in range(1, max_retries + 1):
+        # Request shape intentionally identical to the rest of the fetcher module: the shared
+        # client's own defaults (default headers, follows redirects). Redirects are inspected
+        # via response.history: an /agecheck/ redirect is answered with the age-check handshake,
+        # and a redirect to the HTML storefront is reported clearly instead of crashing
+        # response.json() with an opaque JSONDecodeError.
+        response = await fetcher_instance.get(url, params=params)
+        redirects = [r.headers.get("location", "") for r in response.history]
+        agecheck = next((loc for loc in redirects if "agecheck" in loc), None)
+        if agecheck and attempt < max_retries:
+            await fetcher_instance.get(agecheck)  # handshake: client stores the age cookies
+            continue
+        if response.status_code in TRANSIENT_STATUSES and attempt < max_retries:
+            retry_after = response.headers.get("retry-after", "")
+            wait = float(retry_after) if retry_after.isdigit() else backoff * attempt
+            await asyncio.sleep(wait)
+            continue
+        response.raise_for_status()
+        if response.status_code == 200 and not response.text.strip():
+            # Steam sometimes signals rate limiting with an empty 200 body; retry, then fail clearly.
+            if attempt < max_retries:
+                await asyncio.sleep(backoff * attempt)
+                continue
+            raise RuntimeError(
+                "Steam API returned an empty 200 response after "
+                f"{max_retries} attempts (rate limited?). Slow down (larger delay) and retry later."
+            )
+        content_type = response.headers.get("content-type", "")
+        if "json" not in content_type.lower():
+            chain = " -> ".join(redirects) if redirects else "no redirect"
+            raise RuntimeError(
+                f"Steam API returned non-JSON content (status {response.status_code}, "
+                f"content-type {content_type!r}, redirect chain: {chain}): {response.text[:200]!r}. "
+                f"A redirect to the storefront homepage means rate limiting / IP flagging; an "
+                f"/agecheck/ redirect is handled automatically."
+            )
+        try:
+            data = response.json()
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Steam API returned invalid JSON (status {response.status_code}): "
+                f"{response.text[:200]!r}"
+            ) from exc
+        break
 
-    summary = data.get("query_summary", [])
-    reviews = data.get("reviews", [])
-    next_cursor = data.get("cursor", "")
+    payload = data.get("response", data)  # new WebAPI wraps everything in "response"
+    summary = payload.get("query_summary", [])
+    reviews = payload.get("reviews", [])
+    next_cursor = payload.get("cursor", "")
     return summary, reviews, next_cursor
 
 

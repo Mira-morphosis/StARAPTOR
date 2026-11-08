@@ -1,7 +1,7 @@
 import asyncio
 import os
 import requests
-from evaluator.instructor_factory import get_instructor_client, get_available_models, base_url
+from evaluator.instructor_factory import get_instructor_client, get_available_models, get_request_extras, base_url
 from pydantic import BaseModel, Field
 from tqdm.asyncio import tqdm_asyncio
 from typing import List, Dict, Any, Optional
@@ -69,6 +69,7 @@ class ReviewProcessor:
         self.client = get_instructor_client()
         concurrency_limit = int(os.getenv("STARAPTOR_CONCURRENCY_LIMIT", "100"))
         self.semaphore = asyncio.Semaphore(concurrency_limit)
+        self._failure_count = 0
 
     async def _analyze_single(self, model: str, review: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -93,12 +94,7 @@ class ReviewProcessor:
                     ],
                     temperature=0.0,
                     max_retries=1,
-                    extra_body={
-                        "chat_template_kwargs": {
-                            "enable_thinking": False
-                        },
-                        "reasoning_budget": 0
-                    }
+                    extra_body=get_request_extras()
                 )
 
                 res_dict = result.model_dump()
@@ -109,6 +105,7 @@ class ReviewProcessor:
                 return {**review, **res_dict}
 
             except Exception:
+                self._failure_count += 1
                 return None
 
     async def process_batch(self, reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -126,11 +123,18 @@ class ReviewProcessor:
 
         target_model = available_models[0]
 
+        self._failure_count = 0
         tasks = [self._analyze_single(target_model, r) for r in reviews]
         raw_results = await tqdm_asyncio.gather(
             *tasks,
             desc="Processing Reviews",
             unit="review"
         )
+
+        if reviews and self._failure_count > 0.1 * len(reviews):
+            print(
+                f"[ReviewProcessor] WARNING: {self._failure_count}/{len(reviews)} extractions failed "
+                f"(>10%) — check the provider configuration and the inference server logs."
+            )
 
         return [item for item in raw_results if item is not None]

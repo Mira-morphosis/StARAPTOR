@@ -14,6 +14,10 @@ openai = "^2.44.0"
 pydantic = "^2.13.4"
 requests = "^2.34.2"
 tqdm = "^4.69.1"
+matplotlib = "^3.11.0"
+pandas = "^3.1.1"
+
+storage = { path = "../storage", develop = true }
 
 
 [build-system]

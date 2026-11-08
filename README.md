@@ -120,6 +120,34 @@ The game shown is selected with `--app-id` (or the `STARAPTOR_APP_ID` env var), 
 >On first load, if the selected game needs it, the dashboard automatically kicks off the full initialization (or a daily update) in the background; progress is visible in the banner at the top of the page.
 
 ---
+
+### 8. Research Question Studies (RQ1–RQ3)
+The three research-question studies described in the thesis are driven by dedicated scripts, all runnable in a controlled, reproducible way through a single runner:
+
+`poetry run python src/run_rq_studies.py --app-id 1086940 --rq all`
+
+(or `.venv/bin/python src/run_rq_studies.py ...`). Prerequisite: the game database must already exist (`./staraptor --app-id 1086940 --init`), and RQ1 additionally needs a configured LLM provider in `.env`.
+
+The runner executes, with fixed seeds and parameters, so that everyone gets the same outputs from the same database:
+
+* **RQ1** — `libs/evaluator/tests/rq1_llm_consistency_benchmark.py`: inter-model reliability (Krippendorff's α) of the LLM-extracted review attributes on a frozen 500-review sample;
+* **RQ2** — `libs/analyzer/tests/rq2_rules_inspection.py`: sampling + metrics for the manual inspection of mined rules (the one manual step: fill the `category`/`evidence` columns of `out/<app_id>/rq2/sample.csv`, then re-run with `--rq rq2`);
+* **RQ3** — `libs/analyzer/tests/rq3_forecast_ablation.py`: C1/C2/C3 forecasting ablation on the chronological 70/30 split.
+
+Useful flags: `--rq rq1 rq2 rq3` (select studies), `--seed` (default 42), `--out` / `--fig-dir` (outputs and PDF figures), `--rq2-remine`, `--rq2-annotations`, `--rq3-n-trials`, `--rq3-n-jobs` (default 1 = fully deterministic). Reports land in `out/<app_id>/rqN/report.json`, figures in `out/<app_id>/figures/*.pdf`, and a `run_manifest.json` records the exact commands, seeds, git commit and package versions of the run.
+
+#### Adding frontier (cloud) models to RQ1
+RQ1 benchmarks every model served by the local provider configured in `.env`. Frontier APIs are **never configured in `.env`** — pass them at execution time with repeatable `--rq1-extra-provider` arguments (the RQ1 script accepts the same `--extra-provider` flag directly):
+
+```
+poetry run python src/run_rq_studies.py --app-id 1086940 --rq rq1 \
+  --rq1-extra-provider "name=openai;type=openai_compatible;api_key=$OPENAI_API_KEY;models=gpt-4o,gpt-4o-mini" \
+  --rq1-extra-provider "name=anthropic;type=anthropic;api_key=$ANTHROPIC_API_KEY;models=claude-sonnet-4-5"
+```
+
+Each pair is `;`-separated `key=value`: `name` (label prefix), `api_key` (required), `type` (`openai_compatible`|`anthropic`), optional `base_url` (empty = provider cloud default), optional comma-separated `models` (if omitted, listed live from the endpoint — `openai_compatible` only). Frontier models join the benchmark as extra raters labeled `<name>/<model>`; on re-runs the previous local extractions are reused automatically (`out/<app_id>/rq1/extractions_all_models.csv`, override with `--rq1-merge-extractions`, disable with `--rq1-rerun`), so frontier results are merged into the same Krippendorff's-α calculations without re-paying the local inference cost.
+
+---
 ### Configuring StARAPTOR
 Configuration is done by editing `.env`. 
 Consult the file for an explanation of what environment variables the system requires (and what values are set by default).
