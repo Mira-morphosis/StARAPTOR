@@ -196,6 +196,7 @@ class Analyzer:
     def run(
             self,
             min_support=0.02,
+            min_reviews=10,
             min_confidence=0.5,
             min_lift=1.2,
             deduplicate_mode='both',
@@ -203,7 +204,9 @@ class Analyzer:
     ):
         """
         Runs a single mining pass over the current best sliding window (used for the daily cycle).
+        :param min_reviews:
         :param min_support: The minimum support threshold for frequent itemsets.
+        :param min_reviews: Used to calculate a fallback `min_support` threshold that is used when `min_support` would generate rules shared between less than `min_reviews` different reviews.
         :param min_confidence: The minimum confidence threshold for generated rules.
         :param min_lift: The minimum lift threshold for generated rules.
         :param deduplicate_mode: One of 'itemset', 'antecedent', 'both', or any other value to skip deduplication.
@@ -217,13 +220,15 @@ class Analyzer:
             print("No transactions found.")
             return pd.DataFrame()
 
+        best_min_support = max(min_support, (min_reviews / len(transactions)))
+
         self.rules = _mine_transactions(
-            transactions, min_support, min_confidence, min_lift, deduplicate_mode
+            transactions, best_min_support, min_confidence, min_lift, deduplicate_mode
         )
 
         if save_to_db and not self.rules.empty:
             params = {
-                "min_support": min_support,
+                "min_support": best_min_support,
                 "min_confidence": min_confidence,
                 "min_lift": min_lift,
                 "deduplicate_mode": deduplicate_mode
@@ -238,6 +243,7 @@ class Analyzer:
             window_days: int = 14,
             step_days: int = 7,
             min_support=0.02,
+            min_reviews=10,
             min_confidence=0.5,
             min_lift=1.2,
             deduplicate_mode='both'
@@ -247,6 +253,7 @@ class Analyzer:
         :param window_days: The size in days of each sliding window.
         :param step_days: The number of days to shift back between consecutive windows.
         :param min_support: The minimum support threshold for frequent itemsets.
+        :param min_reviews: Used to calculate a fallback `min_support` threshold that is used when `min_support` would generate rules shared between less than `min_reviews` different reviews.
         :param min_confidence: The minimum confidence threshold for generated rules.
         :param min_lift: The minimum lift threshold for generated rules.
         :param deduplicate_mode: One of 'itemset', 'antecedent', 'both', or any other value to skip deduplication.
@@ -263,13 +270,15 @@ class Analyzer:
             label = metadata.get("window_label", "")
             print(f"--> Mining window {label} ({metadata['total_reviews']} reviews)...")
 
+            best_min_support = max(min_support, (min_reviews / len(transactions)))
+
             rules = _mine_transactions(
-                transactions, min_support, min_confidence, min_lift, deduplicate_mode
+                transactions, best_min_support, min_confidence, min_lift, deduplicate_mode
             )
 
             if not rules.empty:
                 params = {
-                    "min_support": min_support,
+                    "min_support": best_min_support,
                     "min_confidence": min_confidence,
                     "min_lift": min_lift,
                     "deduplicate_mode": deduplicate_mode

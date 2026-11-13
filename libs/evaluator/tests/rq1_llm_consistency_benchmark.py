@@ -26,15 +26,28 @@ stratified sample of reviews (methodology, "LLM-based NLP Performance Benchmark"
     bootstrap confidence intervals over the sampled reviews;
   * at the aggregate level, the daily per-aspect means and the daily positive-review
     ratio — the exact features consumed by the forecasting pipeline — are derived once
-    per model and compared across models through their relative dispersion.
+    per model and compared across models through their relative dispersion;
+  * finally, the base run of all models — the rater that agrees the most with the
+    cross-model majority vote over every extraction field (the consensus criterion,
+    recorded alongside the isUseful fraction in the rq1_model_runs table) — is stored
+    into the shared study database (default <out>/<app_id>/<app_id>.db, the appid folder;
+    --db-path overrides it): its extractions over the frozen sample and, in live mode,
+    over the whole fetched pool are upserted into the reviews table, so RQ2 and RQ3 work
+    from there.
 
 Following Krippendorff's interpretation, alpha >= 0.800 is treated as reliable agreement
 and alpha >= 0.667 as the lowest limit for tentative conclusions.
+
+Figures vs tables (thesis vademecum: figures must not be abundant): RQ1 emits exactly ONE
+PDF figure — the per-aspect alpha with bootstrap CI and thresholds (rq1_alpha_per_aspect.pdf).
+Everything else (spam alpha, detection/rating coefficients, aggregate dispersion) is exported
+as CSV (alpha_per_aspect.csv, aggregate_dispersion.csv, ...) for the LaTeX tables.
 
 Outputs are written under out/<app_id>/rq1/.
 """
 import argparse
 import asyncio
+import datetime
 import json
 import os
 from pathlib import Path
@@ -61,9 +74,25 @@ from evaluator.instructor_factory import (
     get_decoding_metadata,
     list_models_for_extra,
 )
-from storage.storage_utils import db_connection
+from storage.storage_utils import db_connection, get_existing_review_ids, insert_reviews
 
 load_dotenv()
+
+# Columns of the reviews table (mirrors storage.storage_utils._init_reviews_db), split
+# into the raw fetched fields and the LLM-extracted annotation fields.
+RAW_REVIEW_COLUMNS: List[str] = [
+    "recommendationid", "review", "language", "timestamp_updated",
+    "steam_purchase", "received_for_free", "voted_up", "weighted_vote_score",
+    "playtime_at_review", "primarily_steam_deck", "has_hardware_info",
+    "hw_resolution", "hw_ram", "hw_vram", "hw_gpu", "hw_os", "hw_cpu_vendor",
+]
+EXTRACTION_COLUMNS: List[str] = [
+    "isSpam", "multiplayer", "immersion", "community", "replayability", "story",
+    "monetizationModel", "gameplay", "controls", "graphics", "customization",
+    "audio", "difficulty", "isUseful", "containsPositiveAspects",
+    "containsNegativeAspects", "actuallyRecommendsTitle", "containsBugDescription",
+]
+REVIEW_COLUMNS: List[str] = RAW_REVIEW_COLUMNS + EXTRACTION_COLUMNS
 
 ASPECTS: List[str] = [
     "multiplayer", "immersion", "community", "replayability", "story",
@@ -245,8 +274,9 @@ async def draw_live_sample(
     :param top_n_per_day: Per-day top-by-weighted-vote-score count used while building the pool.
     :param delay: Delay between API pages, seconds.
     :param verbose: Regulates logging output.
-    :return: A tuple (sample, pool_size): the DataFrame with one row per sampled review
-             (plus a "source" column), and the size of the raw pool it was drawn from.
+    :return: A tuple (sample, pool): the DataFrame with one row per sampled review
+             (plus a "source" column), and the full raw pool DataFrame it was drawn from
+             (used to store the best model's run over the whole window for RQ2/RQ3).
     """
     from fetcher.fetcher_interface import fetch_review_history  # local import: evaluator does not depend on fetcher
 
@@ -266,7 +296,7 @@ async def draw_live_sample(
 
     sample = stratified_sample(df, sample_size, seed)
     sample["source"] = "steam_live"
-    return sample, len(df)
+    return sample, df
 
 
 # ---------------------------------------------------------------------------
@@ -490,24 +520,243 @@ def aggregate_dispersion(
 
 
 # ---------------------------------------------------------------------------
-# Figures (vector PDF, ready for inclusion in the thesis)
+# Storing the most "useful" run of all models into the shared study database
 # ---------------------------------------------------------------------------
+
+def _py(value: Any) -> Any:
+    """
+    Converts numpy/pandas scalar values to plain Python types DuckDB can bind; NaN becomes None.
+    :param value: The scalar to convert.
+    :return: The converted value.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+    if isinstance(value, (float, np.floating)):
+        return None if pd.isna(value) else float(value)
+    return value
+
+
+def run_usefulness(extractions: Dict[str, pd.DataFrame]) -> Dict[str, Dict[str, Any]]:
+    """
+    Scores every model's run by its usefulness: the fraction of its extracted reviews
+    flagged isUseful=True (spam-flagged extractions carry no isUseful and count as not useful).
+    :param extractions: model -> extraction DataFrame.
+    :return: rater -> metrics dict (n_extracted, n_spam, n_useful, useful_fraction).
+    """
+    metrics: Dict[str, Dict[str, Any]] = {}
+    for rater, df in extractions.items():
+        n = len(df)
+        n_spam = int((df["isSpam"] == True).sum()) if n and "isSpam" in df else 0  # noqa: E712
+        n_useful = int((df["isUseful"] == True).sum()) if n and "isUseful" in df else 0  # noqa: E712
+        metrics[rater] = {
+            "n_extracted": n,
+            "n_spam": n_spam,
+            "n_useful": n_useful,
+            "useful_fraction": (n_useful / n) if n else 0.0,
+        }
+    return metrics
+
+
+AGREEMENT_FIELDS: List[str] = (
+    ["isSpam"] + ASPECTS
+    + ["isUseful", "containsPositiveAspects", "containsNegativeAspects",
+       "actuallyRecommendsTitle", "containsBugDescription"]
+)
+
+
+def majority_agreement_scores(
+    extractions: Dict[str, pd.DataFrame],
+    sample: pd.DataFrame,
+) -> Dict[str, float]:
+    """
+    Scores every model's run by its agreement with the cross-model majority (consensus):
+    for each sampled review and each extraction field, the majority label across raters is
+    computed, and a rater's score is the fraction of (review, field) pairs where its label
+    equals the majority. Missing labels count as a label (None == None agrees).
+    :param extractions: model -> extraction DataFrame.
+    :param sample: The frozen sample (defines the unit order).
+    :return: rater -> majority-agreement score in [0, 1].
+    """
+    units = sample["recommendationid"].astype(str).tolist()
+    frames: Dict[str, pd.DataFrame] = {}
+    for rater, df in extractions.items():
+        g = df.copy()
+        g["recommendationid"] = g["recommendationid"].astype(str)
+        frames[rater] = g.set_index("recommendationid").reindex(units)
+
+    scores: Dict[str, float] = {}
+    for field in AGREEMENT_FIELDS:
+        # a rater may not have the column at all (empty extraction frame): treat as all-None
+        cols = pd.concat(
+            {r: (f[field] if field in f.columns else pd.Series(None, index=f.index, dtype=object))
+             for r, f in frames.items()},
+            axis=1,
+        )  # units x raters
+        maj = cols.apply(lambda row: (row.mode().iloc[0] if not row.mode().empty else None), axis=1)
+        for rater, f in frames.items():
+            a = (f[field] if field in f.columns else pd.Series(None, index=f.index, dtype=object)).to_numpy(dtype=object)
+            b = maj.to_numpy(dtype=object)
+            eq = (a == b) | (pd.isna(a) & pd.isna(b))
+            scores[rater] = scores.get(rater, 0.0) + float(eq.mean())
+    n_fields = len(AGREEMENT_FIELDS)
+    return {r: s / n_fields for r, s in scores.items()}
+
+
+def select_base_run(
+    metrics: Dict[str, Dict[str, Any]],
+    agreement: Dict[str, float],
+) -> str:
+    """
+    Picks the base run to store in the DB among all models: the rater that agrees with the
+    cross-model majority the most (defensible consensus criterion); ties are broken by
+    the isUseful fraction, then the number of extracted reviews, then the rater name.
+    :param metrics: The per-rater metrics from run_usefulness().
+    :param agreement: The per-rater majority-agreement scores.
+    :return: The selected rater label.
+    """
+    return max(
+        metrics,
+        key=lambda r: (agreement.get(r, 0.0), metrics[r]["useful_fraction"], metrics[r]["n_extracted"], r),
+    )
+
+
+def store_run_in_db(
+    app_id: int,
+    sample: pd.DataFrame,
+    extractions: Dict[str, pd.DataFrame],
+    rater: str,
+    metrics: Dict[str, Dict[str, Any]],
+    agreement: Optional[Dict[str, float]] = None,
+    record_run: bool = True,
+) -> Dict[str, Any]:
+    """
+    Stores one model's run into the shared study database so RQ2/RQ3 work from it:
+    the run's extractions are upserted into the reviews table (new sampled reviews are
+    inserted with their raw fetched fields, reviews already present get their annotation
+    columns updated), and every model's run metrics plus the selection are recorded in
+    the rq1_model_runs table.
+    :param app_id: The Steam unique identifier for the application.
+    :param sample: The frozen sample (carries the raw review fields per recommendationid).
+    :param extractions: model -> extraction DataFrame.
+    :param rater: The selected rater whose run is stored.
+    :param metrics: The per-rater metrics from run_usefulness().
+    :param agreement: The per-rater majority-agreement scores from majority_agreement_scores().
+    :param record_run: If True, also (re)write the rq1_model_runs table; False for the
+                       whole-pool storage pass, which must not overwrite the benchmark
+                       selection recorded from the sample.
+    :return: A dict describing what was stored (selected rater, inserted/updated counts).
+    """
+    df = extractions[rater]
+    # ids must be compared as strings: sample.csv round-trips them as int64, extraction
+    # dicts keep them as str — cast so the raw-field join never silently misses.
+    raw = sample.copy()
+    raw["recommendationid"] = raw["recommendationid"].astype(str)
+    raw = raw.set_index("recommendationid")
+
+    records: List[Dict[str, Any]] = []
+    for _, row in df.iterrows():
+        rid = str(row["recommendationid"])
+        rec: Dict[str, Any] = {c: None for c in REVIEW_COLUMNS}
+        if rid in raw.index:
+            base = raw.loc[rid]
+            for c in RAW_REVIEW_COLUMNS:
+                if c in base.index and pd.notna(base[c]):
+                    rec[c] = _py(base[c])
+        for c in EXTRACTION_COLUMNS:
+            if c in row.index:
+                rec[c] = _py(row[c])
+        rec["recommendationid"] = rid
+        records.append(rec)
+
+    existing = get_existing_review_ids(app_id)
+    to_insert = [r for r in records if r["recommendationid"] not in existing]
+    to_update = [r for r in records if r["recommendationid"] in existing]
+
+    if to_insert:
+        # chunked: insert_reviews() runs one executemany, keep it memory-bounded on pool-sized runs
+        chunk = 5000
+        for i in range(0, len(to_insert), chunk):
+            insert_reviews(app_id, to_insert[i:i + chunk])  # creates the reviews table if missing
+    if to_update:
+        # Annotation columns are always overwritten; raw fetched fields use COALESCE so a
+        # record that lacks them (e.g. a db-sourced sample) never wipes the stored values.
+        set_cols = [f"{c} = ?" for c in EXTRACTION_COLUMNS] + [
+            f"{c} = COALESCE(?, reviews.{c})" for c in RAW_REVIEW_COLUMNS if c != "recommendationid"
+        ]
+        raw_order = [c for c in RAW_REVIEW_COLUMNS if c != "recommendationid"]
+        sql = f"UPDATE reviews SET {', '.join(set_cols)} WHERE recommendationid = ?"
+        with db_connection(app_id) as conn:
+            conn.executemany(
+                sql,
+                [[r[c] for c in EXTRACTION_COLUMNS] + [r[c] for c in raw_order] + [r["recommendationid"]]
+                 for r in to_update],
+            )
+
+    if record_run:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        with db_connection(app_id) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS rq1_model_runs (
+                    rater VARCHAR PRIMARY KEY,
+                    n_extracted INTEGER,
+                    n_spam INTEGER,
+                    n_useful INTEGER,
+                    useful_fraction DOUBLE,
+                    majority_agreement DOUBLE,
+                    selected BOOLEAN,
+                    stored_at TIMESTAMP
+                )
+            """)
+            conn.execute("ALTER TABLE rq1_model_runs ADD COLUMN IF NOT EXISTS majority_agreement DOUBLE")
+            for r, m in metrics.items():
+                conn.execute(
+                    "INSERT OR REPLACE INTO rq1_model_runs "
+                    "(rater, n_extracted, n_spam, n_useful, useful_fraction, majority_agreement, selected, stored_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    [r, int(m["n_extracted"]), int(m["n_spam"]), int(m["n_useful"]),
+                     float(m["useful_fraction"]),
+                     float(agreement[r]) if agreement and r in agreement else None,
+                     r == rater, now],
+                )
+
+    return {
+        "rater": rater,
+        "useful_fraction": float(metrics[rater]["useful_fraction"]),
+        "majority_agreement": float(agreement[rater]) if agreement and rater in agreement else None,
+        "n_extracted": int(metrics[rater]["n_extracted"]),
+        "n_useful": int(metrics[rater]["n_useful"]),
+        "n_inserted": len(to_insert),
+        "n_updated": len(to_update),
+        "db_path": os.getenv("STARAPTOR_DB_PATH"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Figure (vector PDF, ready for inclusion in the thesis)
+# ---------------------------------------------------------------------------
+# The whole RQ pipeline emits at most three PDF figures (see the thesis vademecum:
+# figures must not be abundant — most results are tables). RQ1 contributes exactly
+# one: the per-aspect reliability with its bootstrap CI and the interpretation
+# thresholds. Everything else (spam alpha, per-aspect detection/rating coefficients,
+# aggregate dispersion) is tabular and exported as CSV for the LaTeX tables.
 
 def plot_rq1_figures(
     per_aspect: List[Dict[str, Any]],
-    dispersion_summary: pd.DataFrame,
     fig_dir: str | Path,
 ) -> List[str]:
     """
-    Renders the RQ1 result figures as PDFs.
+    Renders the single RQ1 figure as a PDF: per-aspect Krippendorff's alpha (ordinal,
+    0-5 scale) with bootstrap 95% CI and the reliable/tentative threshold lines.
     :param per_aspect: The per-aspect alpha records.
-    :param dispersion_summary: The aggregate-dispersion summary DataFrame.
-    :param fig_dir: Directory the PDF figures are written to.
-    :return: The list of written figure paths.
+    :param fig_dir: Directory the PDF figure is written to.
+    :return: The list of written figure paths (exactly one).
     """
     fig_path = Path(fig_dir)
     fig_path.mkdir(parents=True, exist_ok=True)
-    written = []
 
     df = pd.DataFrame(per_aspect).sort_values("alpha_ordinal_0_5", na_position="first")
     y = np.arange(len(df))
@@ -531,22 +780,8 @@ def plot_rq1_figures(
     out = fig_path / "rq1_alpha_per_aspect.pdf"
     fig.savefig(out)
     plt.close(fig)
-    written.append(str(out))
 
-    disp = dispersion_summary.drop(columns=["mean_cv_overall"], errors="ignore") \
-                             .sort_values("mean_cv_across_models", ascending=False)
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(np.arange(len(disp)), disp["mean_cv_across_models"], color="darkred", width=0.65)
-    ax.set_xticks(np.arange(len(disp)), disp["feature"], rotation=45, ha="right")
-    ax.set_ylabel("mean across-model CV")
-    ax.set_title("RQ1 — aggregate-level dispersion of the daily features consumed by the forecaster")
-    fig.tight_layout()
-    out = fig_path / "rq1_aggregate_dispersion.pdf"
-    fig.savefig(out)
-    plt.close(fig)
-    written.append(str(out))
-
-    return written
+    return [str(out)]
 
 
 # ---------------------------------------------------------------------------
@@ -569,6 +804,9 @@ async def run_rq1_benchmark(
     fetch_max_days: int = 14,
     fetch_delay: float = 2.0,
     redraw_sample: bool = False,
+    db_path: Optional[str] = None,
+    store_pool: bool = True,
+    store_pool_max: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Runs the full RQ1 benchmark for one game.
@@ -596,37 +834,68 @@ async def run_rq1_benchmark(
     :param redraw_sample: If True, ignore the frozen <out>/<app_id>/rq1/sample.csv and draw
                           a fresh sample; otherwise the frozen sample is reused so every
                           run (and every model) sees the identical review set.
+    :param db_path: The shared study database to store the most useful run into
+                    (default: <out>/<app_id>/<app_id>.db, the appid folder; resolved via
+                    the STARAPTOR_DB_PATH env var by storage.storage_utils).
+    :param store_pool: In live mode, after benchmarking the sample, run the most useful
+                       model over the WHOLE fetched pool and store those extractions in the
+                       study db, so RQ2/RQ3 get a dense review table instead of just the
+                       sample. The benchmark itself still runs on the frozen sample only.
+    :param store_pool_max: Optional cap on the pool run (seeded draw from the pool);
+                           None stores the whole pool.
     :return: The report dict (also written to report.json).
     """
+    if db_path:
+        os.environ["STARAPTOR_DB_PATH"] = str(Path(db_path).resolve())
     out_path = Path(out_dir) / str(app_id) / "rq1"
     out_path.mkdir(parents=True, exist_ok=True)
 
     sample_source = "unknown"
     pool_size: Optional[int] = None
+    pool: Optional[pd.DataFrame] = None  # full live pool (live mode only), used for the stored pool run
     frozen = out_path / "sample.csv"
+    pool_csv = out_path / "pool.csv"
     if sample_csv:
         sample = pd.read_csv(sample_csv)
         sample_source = str(sample["source"].iloc[0]) if "source" in sample.columns else "csv"
         print(f"[App {app_id}] Loaded frozen sample from {sample_csv} ({len(sample)} reviews).")
+    elif fetch_live:
+        # Always make sure the raw pool is available (persisted as pool.csv): the sample is
+        # drawn/frozen only when missing or --redraw-sample, but the pool is (re)fetched
+        # whenever pool.csv is absent, so the whole-pool storage pass can always run.
+        if redraw_sample or not frozen.exists() or not pool_csv.exists():
+            new_sample, pool = await draw_live_sample(
+                app_id, sample_size, seed,
+                max_days=fetch_max_days, delay=fetch_delay, verbose=True,
+            )
+            pool_size = len(pool)
+            pool.to_csv(pool_csv, index=False)
+            if redraw_sample or not frozen.exists():
+                sample = new_sample
+                sample.to_csv(frozen, index=False)
+                print(f"[App {app_id}] Frozen LIVE sample drawn with seed {seed} from a pool of {pool_size} "
+                      f"raw Steam reviews ({len(sample)} sampled: {sample_size // 2} top by weighted_vote_score "
+                      f"+ {len(sample) - sample_size // 2} random).")
+            else:
+                sample = pd.read_csv(frozen)
+                print(f"[App {app_id}] Reusing frozen sample {frozen} ({len(sample)} reviews, seed {seed}); "
+                      f"refreshed the live pool ({pool_size} raw reviews) -> {pool_csv}.")
+        else:
+            sample = pd.read_csv(frozen)
+            pool = pd.read_csv(pool_csv)
+            pool_size = len(pool)
+            print(f"[App {app_id}] Reusing frozen sample {frozen} and frozen pool {pool_csv} "
+                  f"({len(sample)} sampled / {pool_size} raw reviews).")
+        sample_source = str(sample["source"].iloc[0]) if "source" in sample.columns else "steam_live"
+        if sample_source != "steam_live":
+            print(f"[App {app_id}] WARNING: the frozen sample comes from the stored, already "
+                  f"spam-filtered history, so spam-detection agreement cannot be measured on it; "
+                  f"pass --redraw-sample to draw a fresh raw (live) sample.")
     elif not redraw_sample and frozen.exists():
         sample = pd.read_csv(frozen)
         sample_source = str(sample["source"].iloc[0]) if "source" in sample.columns else "csv"
         print(f"[App {app_id}] Reusing frozen sample {frozen} (source={sample_source}, "
               f"{len(sample)} reviews, seed {seed}).")
-        if fetch_live and sample_source != "steam_live":
-            print(f"[App {app_id}] WARNING: the frozen sample comes from the stored, already "
-                  f"spam-filtered history, so spam-detection agreement cannot be measured on it; "
-                  f"pass --redraw-sample to draw a fresh raw (live) sample.")
-    elif fetch_live:
-        sample, pool_size = await draw_live_sample(
-            app_id, sample_size, seed,
-            max_days=fetch_max_days, delay=fetch_delay, verbose=True,
-        )
-        sample_source = "steam_live"
-        sample.to_csv(out_path / "sample.csv", index=False)
-        print(f"[App {app_id}] Frozen LIVE sample drawn with seed {seed} from a pool of {pool_size} "
-              f"raw Steam reviews ({len(sample)} sampled: {sample_size // 2} top by weighted_vote_score "
-              f"+ {len(sample) - sample_size // 2} random).")
     else:
         sample = draw_sample(app_id, sample_size, seed)
         sample_source = "db"
@@ -643,6 +912,7 @@ async def run_rq1_benchmark(
             "No models available: neither from the configured local provider nor from "
             "--extra-provider arguments."
         )
+    targets_by_rater = {t["rater"]: t for t in targets}
 
     # Reuse extractions from a previous run (e.g. the local-only pass): raters already
     # present in the merge file are kept, only the missing ones (e.g. frontier models)
@@ -766,7 +1036,44 @@ async def run_rq1_benchmark(
     dispersion_summary.drop(columns=["mean_cv_overall"]).to_csv(out_path / "aggregate_dispersion.csv", index=False)
     daily_all.to_csv(out_path / "daily_aggregates_per_model.csv", index=False)
 
-    figures = plot_rq1_figures(per_aspect, dispersion_summary, fig_dir or out_path / "figures")
+    # Store the most "useful" run of all models into the shared study database, so that
+    # RQ2 and RQ3 work from it: the winning rater's extractions are upserted into the
+    # reviews table and the selection is recorded in the rq1_model_runs table.
+    run_metrics = run_usefulness(extractions)
+    agreement = majority_agreement_scores(extractions, sample)
+    best_rater = select_base_run(run_metrics, agreement)
+    stored = store_run_in_db(app_id, sample, extractions, best_rater, run_metrics, agreement)
+    print(f"[App {app_id}] stored the base run in the DB: rater={best_rater} "
+          f"(majority_agreement={stored['majority_agreement']:.4f}, "
+          f"useful_fraction={stored['useful_fraction']:.3f}, "
+          f"inserted {stored['n_inserted']} / updated {stored['n_updated']} reviews) "
+          f"-> {stored['db_path']}")
+
+    # Whole-pool storage pass (live mode only): the benchmark stays on the frozen sample,
+    # but the winning model re-processes the ENTIRE fetched pool so that RQ2 (mining) and
+    # RQ3 (daily review aggregates) work from a dense review table in the shared db.
+    stored_pool: Optional[Dict[str, Any]] = None
+    if fetch_live and store_pool and pool is not None and not pool.empty:
+        best_target = targets_by_rater[best_rater]
+        pool_df = pool
+        if store_pool_max is not None and len(pool_df) > store_pool_max:
+            pool_df = pool_df.sample(n=store_pool_max, random_state=seed).reset_index(drop=True)
+        print(f"[App {app_id}] storing the best run over the WHOLE live pool: rater={best_rater}, "
+              f"{len(pool_df)} reviews (of {len(pool)} fetched)...")
+        pool_extractions, pool_failures = await extract_with_model(
+            best_target["client"], best_target["model"], best_rater,
+            pool_df.to_dict("records"), concurrency, best_target["request_extras"],
+        )
+        stored_pool = store_run_in_db(
+            app_id, pool_df, {best_rater: pool_extractions}, best_rater, run_metrics,
+            agreement, record_run=False,
+        )
+        stored_pool["failures"] = int(pool_failures)
+        print(f"[App {app_id}] pool run stored: rater={best_rater}, "
+              f"inserted {stored_pool['n_inserted']} / updated {stored_pool['n_updated']} reviews, "
+              f"{pool_failures} failures -> {stored_pool['db_path']}")
+
+    figures = plot_rq1_figures(per_aspect, fig_dir or out_path / "figures")
     for f in figures:
         print(f"[App {app_id}] figure written: {f}")
 
@@ -789,6 +1096,11 @@ async def run_rq1_benchmark(
         "merged_from": merge_extractions if (merge_extractions and not rerun) else None,
         "decoding": get_decoding_metadata(),
         "extraction_rates": extraction_rates,
+        "run_usefulness": run_metrics,
+        "majority_agreement": agreement,
+        "selection_rule": "highest cross-model majority agreement (tie-break: isUseful fraction, extraction count)",
+        "stored_run": stored,
+        "stored_pool_run": stored_pool,
         "thresholds": {"reliable": RELIABLE_THRESHOLD, "tentative": TENTATIVE_THRESHOLD},
         "n_bootstraps": n_boot,
         "per_aspect": per_aspect,
@@ -813,6 +1125,9 @@ async def run_rq1_benchmark(
 def main():
     parser = argparse.ArgumentParser(description="RQ1 — LLM consistency benchmark")
     parser.add_argument("--app-id", type=int, default=int(os.getenv("STARAPTOR_APP_ID", 1086940)))
+    parser.add_argument("--db-path", type=str, default=None,
+                        help="Shared study database the most useful run is stored into "
+                             "(default: <out>/<app_id>/<app_id>.db, the appid folder).")
     parser.add_argument("--sample-size", type=int, default=500)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--bootstraps", type=int, default=1000)
@@ -846,10 +1161,21 @@ def main():
                              "production fetcher; raise it if Steam rate-limits).")
     parser.add_argument("--redraw-sample", action="store_true",
                         help="Ignore the frozen <out>/<app_id>/rq1/sample.csv and draw a fresh sample.")
+    parser.add_argument("--store-pool", action=argparse.BooleanOptionalAction, default=True,
+                        help="In live mode, after benchmarking the frozen sample, run the most useful "
+                             "model over the WHOLE fetched pool and store those extractions in the "
+                             "study db, so RQ2/RQ3 get a dense review table. The benchmark itself "
+                             "still runs on the sample only. Pass --no-store-pool to store the "
+                             "sample run only.")
+    parser.add_argument("--store-pool-max", type=int, default=None,
+                        help="Cap the whole-pool storage run to N reviews (seeded draw from the "
+                             "pool); default: the whole pool.")
     args = parser.parse_args()
     extra_specs = [parse_extra_provider(a) for a in args.extra_provider]
+    db_path = args.db_path or str((Path(args.out).resolve() / str(args.app_id) / f"{args.app_id}.db"))
     asyncio.run(run_rq1_benchmark(
         app_id=args.app_id,
+        db_path=db_path,
         sample_size=args.sample_size,
         seed=args.seed,
         n_boot=args.bootstraps,
@@ -864,6 +1190,8 @@ def main():
         fetch_max_days=args.fetch_max_days,
         fetch_delay=args.fetch_delay,
         redraw_sample=args.redraw_sample,
+        store_pool=args.store_pool,
+        store_pool_max=args.store_pool_max,
     ))
 
 

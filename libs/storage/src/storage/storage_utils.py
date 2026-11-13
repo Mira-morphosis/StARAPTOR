@@ -17,9 +17,20 @@ import duckdb
 def _resolve_db_path(app_id: int) -> Path:
     """
     Resolves the DuckDB file path for an app, falling back to defaults if unset.
+    STARAPTOR_DB_PATH, when set, is a full path to a specific .db file and takes
+    precedence over STARAPTOR_DB_ROOT; it is read at call time (not import time),
+    so callers can point a running process at another database (the RQ pipeline
+    uses it to work on the shared study database in the appid folder,
+    <out>/<app_id>/<app_id>.db, instead of the directory defined in .env).
     :param app_id: The Steam unique identifier for the application.
     :return: The resolved Path to the app's .db file.
     """
+    override = os.getenv("STARAPTOR_DB_PATH")
+    if override:
+        db_file = Path(override).expanduser()
+        db_file.parent.mkdir(parents=True, exist_ok=True)
+        return db_file
+
     if DB_ROOT is None:
         print("W: .env is missing or is not set up correctly. Forcing defaults... (~/.staraptor/)")
         default_folder = Path("~/.staraptor/").expanduser()

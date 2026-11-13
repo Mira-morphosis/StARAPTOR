@@ -1,0 +1,358 @@
+{
+  "rq": "RQ2",
+  "n_inspected": 765,
+  "category_counts": {
+    "actionable": 564,
+    "semantically_trivial": 133,
+    "taxonomy_artifact": 11,
+    "unclear": 57
+  },
+  "residual_noise_rate": 0.18823529411764706,
+  "actionability_rate": 0.7372549019607844,
+  "unclear_rate": 0.07450980392156863,
+  "persistence": {
+    "overall": {
+      "n_rules": 49571,
+      "n_persistent": 8861,
+      "persistence_rate": 0.1787537068043816
+    },
+    "sampled": {
+      "n_rules": 765,
+      "n_persistent": 80,
+      "persistence_rate": 0.10457516339869281
+    }
+  },
+  "redundancy": {
+    "n_rules": 765,
+    "n_redundant_full": 281,
+    "redundancy_rate": 0.3673202614379085,
+    "n_same_antecedent": 459,
+    "same_antecedent_rate": 0.6
+  },
+  "per_window_category_counts": {
+    "run_20251127_095822_2c5f": {
+      "actionable": 13,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20251204_095822_4fcd": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20251211_095822_21b3": {
+      "actionable": 11,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20251218_095822_6d66": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20251225_095822_3fe5": {
+      "actionable": 9,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 1,
+      "unclear": 0
+    },
+    "run_20260101_095822_d0dc": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260108_095822_8fc5": {
+      "actionable": 13,
+      "semantically_trivial": 0,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260115_095822_7990": {
+      "actionable": 11,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260122_095822_9f78": {
+      "actionable": 12,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260129_095822_5623": {
+      "actionable": 13,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260205_095822_4f39": {
+      "actionable": 10,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260212_095822_a7a9": {
+      "actionable": 13,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260219_095822_f126": {
+      "actionable": 14,
+      "semantically_trivial": 0,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260226_095822_0855": {
+      "actionable": 14,
+      "semantically_trivial": 0,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260305_095822_8db5": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260312_095822_91ea": {
+      "actionable": 13,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260319_095822_061a": {
+      "actionable": 13,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260326_095822_053d": {
+      "actionable": 12,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260402_095822_313b": {
+      "actionable": 11,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260409_095822_396a": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260416_095822_c21c": {
+      "actionable": 7,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 1,
+      "unclear": 2
+    },
+    "run_20260423_095822_4dd2": {
+      "actionable": 13,
+      "semantically_trivial": 0,
+      "taxonomy_artifact": 1,
+      "unclear": 1
+    },
+    "run_20260430_095822_2398": {
+      "actionable": 11,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260507_095822_9af2": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260514_095822_a5bd": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 1,
+      "unclear": 0
+    },
+    "run_20260521_095822_f1c8": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260528_095822_8d2b": {
+      "actionable": 10,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 3
+    },
+    "run_20260604_095822_fd3d": {
+      "actionable": 11,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260611_095822_3e82": {
+      "actionable": 13,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 1,
+      "unclear": 0
+    },
+    "run_20260618_095822_4325": {
+      "actionable": 9,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260625_095822_ec18": {
+      "actionable": 10,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260702_095822_6d7f": {
+      "actionable": 9,
+      "semantically_trivial": 4,
+      "taxonomy_artifact": 1,
+      "unclear": 1
+    },
+    "run_20260709_095822_c4c6": {
+      "actionable": 12,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260716_095822_cb09": {
+      "actionable": 11,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 1,
+      "unclear": 0
+    },
+    "run_20260723_095822_5d9b": {
+      "actionable": 8,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260730_095822_9fbd": {
+      "actionable": 8,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 1,
+      "unclear": 1
+    },
+    "run_20260806_095822_4f68": {
+      "actionable": 10,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260813_095822_b572": {
+      "actionable": 6,
+      "semantically_trivial": 4,
+      "taxonomy_artifact": 1,
+      "unclear": 4
+    },
+    "run_20260820_095822_b9ac": {
+      "actionable": 12,
+      "semantically_trivial": 0,
+      "taxonomy_artifact": 1,
+      "unclear": 2
+    },
+    "run_20260827_095822_338e": {
+      "actionable": 10,
+      "semantically_trivial": 4,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20260903_095822_73dd": {
+      "actionable": 9,
+      "semantically_trivial": 4,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20260910_095822_86d3": {
+      "actionable": 12,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260917_095822_628c": {
+      "actionable": 14,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20260924_095822_0781": {
+      "actionable": 11,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20261001_095822_dff8": {
+      "actionable": 10,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 0
+    },
+    "run_20261008_095822_19e9": {
+      "actionable": 11,
+      "semantically_trivial": 1,
+      "taxonomy_artifact": 1,
+      "unclear": 2
+    },
+    "run_20261015_095822_fb8c": {
+      "actionable": 8,
+      "semantically_trivial": 5,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20261022_095822_dce8": {
+      "actionable": 11,
+      "semantically_trivial": 3,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20261029_095822_cde3": {
+      "actionable": 11,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    },
+    "run_20261105_095822_5fe5": {
+      "actionable": 8,
+      "semantically_trivial": 6,
+      "taxonomy_artifact": 0,
+      "unclear": 1
+    },
+    "run_20261112_095822_d167": {
+      "actionable": 11,
+      "semantically_trivial": 2,
+      "taxonomy_artifact": 0,
+      "unclear": 2
+    }
+  },
+  "app_id": 1091500,
+  "seed": 42,
+  "classification": {
+    "protocol": "rule-based (classify_rule; entailments measured at >= 0.9, lift threshold 1.5)",
+    "classified_file": "out/1091500/rq2/sample_classified.csv",
+    "distribution": {
+      "actionable": 564,
+      "semantically_trivial": 133,
+      "taxonomy_artifact": 11,
+      "unclear": 57
+    }
+  },
+  "traceback_file": "out/1091500/rq2/traceback_actionable_rules.csv",
+  "tables": [
+    "out/1091500/rq2/rq2_metrics_table.csv",
+    "out/1091500/rq2/rq2_per_window_categories.csv"
+  ],
+  "figures": []
+}

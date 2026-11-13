@@ -20,7 +20,15 @@ rate, and the improvement over C1 is expressed as relative error reduction. For 
 gain-based feature importance additionally reports the share of total gain absorbed by
 the rule features and the highest-gain rules.
 
-Outputs are written under out/<app_id>/rq3/.
+The study works on the shared study database in the appid folder,
+out/<app_id>/<app_id>.db (override with --db-path): the frozen KPI sample, the reviews
+annotated by RQ1's most useful run and the rules mined by RQ2 — not the database in the
+directory defined in .env.
+
+Outputs are written under out/<app_id>/rq3/. RQ3 emits exactly TWO PDF figures
+(rq3_metrics_by_config.pdf, rq3_forecast_vs_actual_C3.pdf); the relative error reduction
+vs C1 and the top rules by gain are exported as CSV tables (rq3_metrics_table.csv,
+rq3_top_rules_by_gain.csv) for the LaTeX tables of the results chapter.
 """
 import argparse
 import copy
@@ -142,8 +150,12 @@ def gain_importance(
 
 
 # ---------------------------------------------------------------------------
-# Figures (vector PDF, ready for inclusion in the thesis)
+# Figures and tables (PDF figures are scarce on purpose; CSVs feed the LaTeX tables)
 # ---------------------------------------------------------------------------
+# RQ3 emits exactly TWO PDF figures (thesis vademecum: figures must not be abundant):
+# the per-configuration error metrics (the ablation answer) and the C3 held-out forecast
+# against the actual KPI (the qualitative "does the system track reality" evidence).
+# The relative error reduction vs C1 and the top rules by gain are tabular -> CSV.
 
 def plot_rq3_figures(
     results: Dict[str, Any],
@@ -151,9 +163,8 @@ def plot_rq3_figures(
     fig_dir: str | Path,
 ) -> List[str]:
     """
-    Renders the RQ3 result figures as PDFs: per-configuration error metrics, relative
-    error reduction vs the C1 baseline, the C3 held-out forecast against the actual KPI,
-    and the highest-gain association-rule features.
+    Renders the two RQ3 result figures as PDFs: per-configuration error metrics on the
+    held-out split, and the C3 held-out forecast against the actual KPI.
     :param results: The per-config results dict built by run_rq3_ablation().
     :param per_day_by_config: config -> per-day benchmark DataFrame.
     :param fig_dir: Directory the PDF figures are written to.
@@ -165,7 +176,7 @@ def plot_rq3_figures(
     names = list(CONFIGS.keys())
     colors = {"C1": "gray", "C2": "steelblue", "C3": "seagreen"}
 
-    # 1. Error metrics per configuration.
+    # 1. Error metrics per configuration (the ablation comparison).
     metric_keys = ["mape_1step_pct", "mape_multistep_pct", "mape_multistep_weekday_pct",
                    "mape_multistep_weekend_pct", "underestimation_pct"]
     fig, ax = plt.subplots(figsize=(9, 4.5))
@@ -184,26 +195,7 @@ def plot_rq3_figures(
     plt.close(fig)
     written.append(str(out))
 
-    # 2. Relative error reduction vs C1.
-    red_keys = ["mape_1step_pct", "mape_multistep_pct", "underestimation_pct"]
-    fig, ax = plt.subplots(figsize=(7, 4))
-    x = np.arange(len(red_keys))
-    width = 0.35
-    for i, name in enumerate(("C2", "C3")):
-        vals = [results[name]["relative_error_reduction_vs_C1_pct"].get(k, 0.0) for k in red_keys]
-        ax.bar(x + (i - 0.5) * width, vals, width, label=name, color=colors[name])
-    ax.axhline(0.0, color="black", linewidth=0.8)
-    ax.set_xticks(x, [k.replace("_pct", " (%)").replace("mape_", "MAPE ").replace("_", " ") for k in red_keys])
-    ax.set_ylabel("relative error reduction vs C1 (%)")
-    ax.set_title("RQ3 — improvement over the KPI-only baseline (positive = better)")
-    ax.legend()
-    fig.tight_layout()
-    out = fig_path / "rq3_reduction_vs_C1.pdf"
-    fig.savefig(out)
-    plt.close(fig)
-    written.append(str(out))
-
-    # 3. C3 held-out forecast vs actual.
+    # 2. C3 held-out forecast vs actual.
     df = per_day_by_config.get("C3")
     if df is not None and not df.empty:
         fig, ax = plt.subplots(figsize=(9, 4))
@@ -220,23 +212,39 @@ def plot_rq3_figures(
         plt.close(fig)
         written.append(str(out))
 
-    # 4. Highest-gain rule features of C3.
-    top_rules = [r for r in results["C3"]["top_rules_by_gain"] if r["gain"] > 0][:10]
-    if top_rules:
-        labels = [r["feature"].replace("rule_lift_", "").replace("_->", " → ") for r in top_rules][::-1]
-        vals = [r["gain_share"] for r in top_rules][::-1]
-        fig, ax = plt.subplots(figsize=(8, 4.5))
-        ax.barh(np.arange(len(vals)), vals, color="darkred", height=0.65)
-        ax.set_yticks(np.arange(len(vals)), labels)
-        ax.set_xlabel("share of total gain")
-        ax.set_title("RQ3 — top association-rule features by gain (C3)")
-        fig.tight_layout()
-        out = fig_path / "rq3_top_rules_by_gain.pdf"
-        fig.savefig(out)
-        plt.close(fig)
-        written.append(str(out))
-
     return written
+
+
+def write_rq3_tables(results: Dict[str, Any], out_path: str | Path) -> List[str]:
+    """
+    Writes the RQ3 result tables as CSVs: rq3_metrics_table.csv (tidy long format with every
+    held-out metric per configuration plus the relative error reduction vs C1) and
+    rq3_top_rules_by_gain.csv (the top association-rule features of C3 by gain share).
+    :param results: The per-config results dict built by run_rq3_ablation().
+    :param out_path: Directory the CSV tables are written to (<out>/<app_id>/rq3/).
+    :return: The list of written CSV paths.
+    """
+    out = Path(out_path)
+    out.mkdir(parents=True, exist_ok=True)
+
+    rows = []
+    for name in CONFIGS:
+        for metric, value in results[name]["metrics"].items():
+            rows.append({"group": "metric", "config": name, "metric": metric, "value": value})
+        for metric, value in results[name].get("relative_error_reduction_vs_C1_pct", {}).items():
+            rows.append({"group": "relative_error_reduction_vs_C1_pct", "config": name,
+                         "metric": metric, "value": value})
+        rows.append({"group": "rule_feature_gain_share", "config": name, "metric": "C3",
+                     "value": results[name]["rule_feature_gain_share"]})
+    metrics_csv = out / "rq3_metrics_table.csv"
+    pd.DataFrame(rows).to_csv(metrics_csv, index=False)
+
+    top_rules = [r for r in results["C3"]["top_rules_by_gain"] if r["gain"] > 0][:10]
+    rules_csv = out / "rq3_top_rules_by_gain.csv"
+    # explicit columns: keeps the header (and the file readable) even when no rule has gain
+    pd.DataFrame(top_rules, columns=["feature", "gain", "gain_share"]).to_csv(rules_csv, index=False)
+
+    return [str(metrics_csv), str(rules_csv)]
 
 
 def run_rq3_ablation(
@@ -247,6 +255,7 @@ def run_rq3_ablation(
     n_jobs: int = -1,
     out_dir: str = "./out",
     fig_dir: Optional[str] = None,
+    db_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Runs the C1/C2/C3 ablation for one game.
@@ -257,8 +266,14 @@ def run_rq3_ablation(
     :param n_jobs: Parallel Optuna trials (-1 for all cores).
     :param out_dir: Root output directory; artifacts land in <out_dir>/<app_id>/rq3/.
     :param fig_dir: Directory for the PDF figures; defaults to <out_dir>/<app_id>/rq3/figures/.
+    :param db_path: The shared study database to work on (default: <out>/<app_id>/<app_id>.db,
+                    the appid folder; resolved via the STARAPTOR_DB_PATH env var by
+                    storage.storage_utils). RQ3 reads the frozen KPI sample, the reviews
+                    annotated by RQ1's best run and the rules mined by RQ2 from this database.
     :return: The report dict (also written to report.json).
     """
+    if db_path:
+        os.environ["STARAPTOR_DB_PATH"] = str(Path(db_path).resolve())
     out_path = Path(out_dir) / str(app_id) / "rq3"
     out_path.mkdir(parents=True, exist_ok=True)
 
@@ -354,6 +369,10 @@ def run_rq3_ablation(
     report["figures"] = figures
     for f in figures:
         print(f"[App {app_id}] figure written: {f}")
+    tables = write_rq3_tables(results, out_path)
+    report["tables"] = tables
+    for t in tables:
+        print(f"[App {app_id}] table written: {t}")
 
     with open(out_path / "report.json", "w") as f:
         json.dump(report, f, indent=2, default=str)
@@ -365,6 +384,9 @@ def run_rq3_ablation(
 def main():
     parser = argparse.ArgumentParser(description="RQ3 — forecasting ablation (C1/C2/C3)")
     parser.add_argument("--app-id", type=int, default=int(os.getenv("STARAPTOR_APP_ID", 1086940)))
+    parser.add_argument("--db-path", type=str, default=None,
+                        help="Shared study database to work on "
+                             "(default: <out>/<app_id>/<app_id>.db, the appid folder).")
     parser.add_argument("--split", type=float, default=0.70, help="Chronological train fraction.")
     parser.add_argument("--n-trials", type=int, default=150, help="Optuna trials per configuration.")
     parser.add_argument("--eval-days", type=int, default=30, help="Recursive forecast evaluation horizon.")
@@ -372,8 +394,10 @@ def main():
     parser.add_argument("--out", type=str, default="./out")
     parser.add_argument("--fig-dir", type=str, default=None, help="Directory for the PDF figures.")
     args = parser.parse_args()
+    db_path = args.db_path or str((Path(args.out).resolve() / str(args.app_id) / f"{args.app_id}.db"))
     run_rq3_ablation(
         app_id=args.app_id,
+        db_path=db_path,
         split_ratio=args.split,
         n_trials=args.n_trials,
         eval_days=args.eval_days,

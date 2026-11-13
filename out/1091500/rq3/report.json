@@ -1,0 +1,220 @@
+{
+  "rq": "RQ3",
+  "app_id": 1091500,
+  "split_ratio": 0.7,
+  "eval_days": 30,
+  "n_trials_per_config": 150,
+  "configs": {
+    "C1": {
+      "n_features": 13,
+      "tuning": {
+        "score": 3.9575339855333946,
+        "mape_multistep_pct": 3.9575339855333946,
+        "mape_1step_pct": 3.9575339855333946
+      },
+      "metrics": {
+        "train_samples": 254,
+        "test_samples": 110,
+        "mae_1step": 1222.3296375680047,
+        "rmse_1step": 1461.1323106395043,
+        "mape_1step_pct": 2.5498982056679362,
+        "mae_multistep": 4829.2723465826375,
+        "rmse_multistep": 5909.367590472699,
+        "mape_multistep_pct": 10.151664894010107,
+        "mape_multistep_weekday_pct": 9.599466549051087,
+        "mape_multistep_weekend_pct": 11.670210342647412,
+        "underestimation_pct": 5.825048542075447,
+        "underestimation_weekend_pct": 3.6873565074310917
+      },
+      "rule_feature_gain_share": 0.0,
+      "top_rules_by_gain": []
+    },
+    "C2": {
+      "n_features": 27,
+      "tuning": {
+        "score": 3.8355709583789594,
+        "mape_multistep_pct": 3.8355709583789594,
+        "mape_1step_pct": 3.8355709583789594
+      },
+      "metrics": {
+        "train_samples": 254,
+        "test_samples": 110,
+        "mae_1step": 1193.1520644116608,
+        "rmse_1step": 1479.1844374393943,
+        "mape_1step_pct": 2.5527933246711587,
+        "mae_multistep": 7164.71472140585,
+        "rmse_multistep": 8543.474258258271,
+        "mape_multistep_pct": 14.590300419774366,
+        "mape_multistep_weekday_pct": 14.772992564912563,
+        "mape_multistep_weekend_pct": 14.087897020644316,
+        "underestimation_pct": 13.02250614882622,
+        "underestimation_weekend_pct": 9.277998715373698
+      },
+      "rule_feature_gain_share": 0.0,
+      "top_rules_by_gain": [],
+      "relative_error_reduction_vs_C1_pct": {
+        "mae_1step": 2.3870461992884953,
+        "rmse_1step": -1.2354888512450282,
+        "mape_1step_pct": -0.11353861094482844,
+        "mae_multistep": -48.360129792138416,
+        "rmse_multistep": -44.575102622358045,
+        "mape_multistep_pct": -43.72322739281152,
+        "mape_multistep_weekday_pct": -53.89389076388711,
+        "mape_multistep_weekend_pct": -20.716736091394626,
+        "underestimation_pct": -123.56047429926377,
+        "underestimation_weekend_pct": -151.61653603810322
+      }
+    },
+    "C3": {
+      "n_features": 31561,
+      "tuning": {
+        "score": 4.003345747477761,
+        "mape_multistep_pct": 4.003345747477761,
+        "mape_1step_pct": 4.003345747477761
+      },
+      "metrics": {
+        "train_samples": 254,
+        "test_samples": 110,
+        "mae_1step": 1331.1972240470159,
+        "rmse_1step": 1608.0710305248995,
+        "mape_1step_pct": 2.8787505683236954,
+        "mae_multistep": 6789.795635214978,
+        "rmse_multistep": 9106.316007037061,
+        "mape_multistep_pct": 15.397259800763456,
+        "mape_multistep_weekday_pct": 13.825623739091974,
+        "mape_multistep_weekend_pct": 19.719258970360027,
+        "underestimation_pct": 1.7690841767559398,
+        "underestimation_weekend_pct": 1.4053761078292406
+      },
+      "rule_feature_gain_share": 0.5227103227269118,
+      "top_rules_by_gain": [
+        {
+          "feature": "rule_lift_lang_english AND voted_up_False_->containsNegativeAspects_True AND steam_purchase_True",
+          "gain": 0.06520552188158035,
+          "gain_share": 0.03423457083247536
+        },
+        {
+          "feature": "rule_lift_story_3_->containsNegativeAspects_True AND containsPositiveAspects_True",
+          "gain": 0.05925445258617401,
+          "gain_share": 0.031110106869246056
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_True AND graphics_5_->story_5 AND voted_up_True",
+          "gain": 0.04955101013183594,
+          "gain_share": 0.02601555078816475
+        },
+        {
+          "feature": "rule_lift_containsPositiveAspects_True AND gameplay_2_->containsNegativeAspects_True",
+          "gain": 0.04342377185821533,
+          "gain_share": 0.022798593594467724
+        },
+        {
+          "feature": "rule_lift_containsBugDescription_True AND voted_up_True_->actuallyRecommendsTitle_True AND containsNegativeAspects_True AND steam_purchase_True",
+          "gain": 0.04268288612365723,
+          "gain_share": 0.022409609587797807
+        },
+        {
+          "feature": "rule_lift_containsNegativeAspects_False AND immersion_5 AND playtime_heavy_->actuallyRecommendsTitle_True AND containsBugDescription_False AND story_5",
+          "gain": 0.0351487398147583,
+          "gain_share": 0.01845398960299566
+        },
+        {
+          "feature": "rule_lift_containsPositiveAspects_True AND gameplay_2_->containsNegativeAspects_True AND steam_purchase_True",
+          "gain": 0.03177943825721741,
+          "gain_share": 0.01668501989768322
+        },
+        {
+          "feature": "rule_lift_containsNegativeAspects_False AND immersion_5_->actuallyRecommendsTitle_True AND containsBugDescription_False AND story_5",
+          "gain": 0.028191208839416504,
+          "gain_share": 0.014801107452507652
+        },
+        {
+          "feature": "rule_lift_hw_ram_32GB AND hw_vram_16GB_->hw_os_Windows_11 AND steam_purchase_True",
+          "gain": 0.026695460081100464,
+          "gain_share": 0.01401580100396556
+        },
+        {
+          "feature": "rule_lift_graphics_5_->story_5",
+          "gain": 0.026246264576911926,
+          "gain_share": 0.013779961847065628
+        },
+        {
+          "feature": "rule_lift_containsBugDescription_True AND playtime_heavy_->actuallyRecommendsTitle_True AND containsNegativeAspects_True",
+          "gain": 0.02501887083053589,
+          "gain_share": 0.013135548660311922
+        },
+        {
+          "feature": "rule_lift_containsNegativeAspects_False AND replayability_4_->actuallyRecommendsTitle_True AND containsBugDescription_False AND story_5",
+          "gain": 0.024845778942108154,
+          "gain_share": 0.013044670980877533
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_False AND voted_up_True_->containsNegativeAspects_True AND containsPositiveAspects_False",
+          "gain": 0.023665428161621094,
+          "gain_share": 0.012424956557379196
+        },
+        {
+          "feature": "rule_lift_containsPositiveAspects_False AND lang_schinese_->containsNegativeAspects_True",
+          "gain": 0.022783469408750534,
+          "gain_share": 0.011961905599036999
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_True AND containsNegativeAspects_True_->containsPositiveAspects_True AND playtime_heavy AND voted_up_True",
+          "gain": 0.02213960886001587,
+          "gain_share": 0.011623862302613051
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_False AND containsBugDescription_True_->containsNegativeAspects_True AND steam_purchase_True AND voted_up_False",
+          "gain": 0.02115335501730442,
+          "gain_share": 0.01110605374801817
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_False AND containsPositiveAspects_True AND steam_purchase_True_->containsNegativeAspects_True",
+          "gain": 0.020423296838998795,
+          "gain_share": 0.010722754485995207
+        },
+        {
+          "feature": "rule_lift_actuallyRecommendsTitle_True AND containsBugDescription_False AND lang_english_->containsNegativeAspects_False AND containsPositiveAspects_True AND steam_purchase_True",
+          "gain": 0.01924845576286316,
+          "gain_share": 0.010105932798548078
+        },
+        {
+          "feature": "rule_lift_playtime_heavy AND story_4_->containsNegativeAspects_True AND containsPositiveAspects_True AND voted_up_True",
+          "gain": 0.017892466858029366,
+          "gain_share": 0.009394003856473364
+        },
+        {
+          "feature": "rule_lift_gameplay_5 AND steam_purchase_True AND voted_up_True_->actuallyRecommendsTitle_True AND story_5",
+          "gain": 0.01775360107421875,
+          "gain_share": 0.009321095759507198
+        }
+      ],
+      "relative_error_reduction_vs_C1_pct": {
+        "mae_1step": -8.906565228641465,
+        "rmse_1step": -10.056496514068831,
+        "mape_1step_pct": -12.896685911805545,
+        "mae_multistep": -40.59666028195066,
+        "rmse_multistep": -54.099670863572626,
+        "mape_multistep_pct": -51.67226224979571,
+        "mape_multistep_weekday_pct": -44.0249170976969,
+        "mape_multistep_weekend_pct": -68.97089590834806,
+        "underestimation_pct": 69.62970928091836,
+        "underestimation_weekend_pct": 61.88662243542221
+      }
+    }
+  },
+  "monotonic_improvement_C1_C2_C3": false,
+  "outputs": {
+    "C1": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/per_day_C1.csv",
+    "C2": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/per_day_C2.csv",
+    "C3": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/per_day_C3.csv"
+  },
+  "figures": [
+    "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures/rq3_metrics_by_config.pdf",
+    "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures/rq3_forecast_vs_actual_C3.pdf"
+  ],
+  "tables": [
+    "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/rq3_metrics_table.csv",
+    "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/rq3_top_rules_by_gain.csv"
+  ]
+}

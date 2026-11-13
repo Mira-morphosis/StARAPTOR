@@ -1,0 +1,130 @@
+{
+  "runner": "src/run_rq_studies.py",
+  "timestamp_utc": "2026-11-11T16:33:33.411717+00:00",
+  "app_id": 1091500,
+  "git_commit": "ec09441da9b73c5f1bd185e5eb4809c7d06bc74d",
+  "python": "3.13.5",
+  "packages": {
+    "analyzer": "0.1.0",
+    "evaluator": "0.1.0",
+    "storage": "0.1.0",
+    "fetcher": "0.1.0",
+    "orchestrator": "0.1.0",
+    "pandas": "3.0.5",
+    "numpy": "2.5.1",
+    "matplotlib": "3.11.1",
+    "duckdb": "1.5.5",
+    "xgboost": "3.4.0",
+    "optuna": "4.9.0",
+    "mlxtend": "0.25.0",
+    "instructor": "1.15.4",
+    "openai": "2.53.0",
+    "anthropic": "0.115.1",
+    "scikit-learn": "1.9.0",
+    "statsmodels": "0.14.6"
+  },
+  "controlled_defaults": {
+    "seed": 42,
+    "rq1": {
+      "sample_size": 500,
+      "bootstraps": 1000,
+      "min_rating_units": 30
+    },
+    "rq2": {
+      "top_k": 10,
+      "random_k": 5,
+      "traceback_max_reviews": 10
+    },
+    "rq3": {
+      "split": 0.7,
+      "n_trials": 150,
+      "eval_days": 30,
+      "n_jobs": 1
+    }
+  },
+  "db_path": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db",
+  "db_created_empty": false,
+  "out_root": "/home/maria/PycharmProjects/StARAPTOR/out",
+  "fig_dir": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures",
+  "runs": {
+    "kpi_freeze": {
+      "error": "Client error '429 Too Many Requests' for url 'https://games-popularity.com/swagger/api/game/players/1091500?apiKey=af08714d-499c-41c5-95ce-e8c8309c9dc5'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429"
+    },
+    "rq1": {
+      "command": [
+        "libs/evaluator/tests/rq1_llm_consistency_benchmark.py",
+        "--app-id",
+        "1091500",
+        "--db-path",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db",
+        "--sample-size",
+        "500",
+        "--seed",
+        "42",
+        "--bootstraps",
+        "1000",
+        "--min-rating-units",
+        "30",
+        "--out",
+        "/home/maria/PycharmProjects/StARAPTOR/out",
+        "--fig-dir",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures",
+        "--merge-extractions",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/extractions_all_models.csv",
+        "--fetch-live",
+        "--fetch-max-days",
+        "365",
+        "--fetch-delay",
+        "2.0"
+      ],
+      "returncode": 0
+    },
+    "rq2 (sampling)": {
+      "command": [
+        "libs/analyzer/tests/rq2_rules_inspection.py",
+        "--app-id",
+        "1091500",
+        "--db-path",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db",
+        "--seed",
+        "42",
+        "--top-k",
+        "10",
+        "--random-k",
+        "5",
+        "--out",
+        "/home/maria/PycharmProjects/StARAPTOR/out"
+      ],
+      "returncode": 0
+    },
+    "rq2 (metrics)": {
+      "skipped": "no annotations yet"
+    },
+    "rq3": {
+      "command": [
+        "libs/analyzer/tests/rq3_forecast_ablation.py",
+        "--app-id",
+        "1091500",
+        "--db-path",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db",
+        "--split",
+        "0.7",
+        "--n-trials",
+        "150",
+        "--eval-days",
+        "30",
+        "--n-jobs",
+        "1",
+        "--out",
+        "/home/maria/PycharmProjects/StARAPTOR/out",
+        "--fig-dir",
+        "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures"
+      ],
+      "returncode": 0
+    }
+  },
+  "reports": {
+    "rq1": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/report.json",
+    "rq3": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq3/report.json"
+  }
+}

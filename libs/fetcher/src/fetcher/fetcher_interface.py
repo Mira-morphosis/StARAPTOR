@@ -275,8 +275,9 @@ async def fetch_review_history(
     :param verbose: Regulates logging output.
     """
 
-    #Until a better KPI API is found, this is a limit we have to bear with.
-    HARD_LIMIT_DAYS = 140
+    # The Steam review API no longer hard-caps at 140 days; the ceiling is configured
+    # via STARAPTOR_MAX_LOOKBACK_DAYS in .env (default 140 for backward compatibility).
+    HARD_LIMIT_DAYS = int(os.getenv("STARAPTOR_MAX_LOOKBACK_DAYS", 140))
     if max_days is None or max_days > HARD_LIMIT_DAYS:
         max_days = HARD_LIMIT_DAYS
 

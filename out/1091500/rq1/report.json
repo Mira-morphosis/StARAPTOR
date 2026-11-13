@@ -1,0 +1,314 @@
+{
+  "rq": "RQ1",
+  "app_id": 1091500,
+  "seed": 42,
+  "sample_size": 500,
+  "raters": [
+    "Muse-Glimmer-30B-UD-Q4_K_XL",
+    "Qwen3.8-27B-UD-Q4_K_XL",
+    "gemma-4-12b-it-UD-Q8_K_XL",
+    "gemma-4-E4B-it-UD-Q8_K_XL"
+  ],
+  "sample_source": "steam_live",
+  "sample_pool_size": 76835,
+  "spam_detection": {
+    "alpha_nominal": 0.7966291036335746,
+    "ci95": [
+      0.7492068127711208,
+      0.8417094288967767
+    ],
+    "n_reviews": 500,
+    "n_spam_flagged_by_majority": 114,
+    "measurable": true
+  },
+  "providers": {
+    "local": [
+      "Muse-Glimmer-30B-UD-Q4_K_XL",
+      "Qwen3.8-27B-UD-Q4_K_XL",
+      "gemma-4-12b-it-UD-Q8_K_XL",
+      "gemma-4-E4B-it-UD-Q8_K_XL"
+    ],
+    "extra": {}
+  },
+  "merged_from": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/extractions_all_models.csv",
+  "decoding": {
+    "provider_type": "openai_compatible",
+    "base_url": "http://localhost:8000/",
+    "instructor_mode": "JSON",
+    "temperature": 0.0,
+    "request_extras": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      },
+      "reasoning_budget": 0
+    },
+    "concurrency_limit": 8
+  },
+  "extraction_rates": {},
+  "run_usefulness": {
+    "Muse-Glimmer-30B-UD-Q4_K_XL": {
+      "n_extracted": 500,
+      "n_spam": 101,
+      "n_useful": 303,
+      "useful_fraction": 0.606
+    },
+    "Qwen3.8-27B-UD-Q4_K_XL": {
+      "n_extracted": 500,
+      "n_spam": 126,
+      "n_useful": 17,
+      "useful_fraction": 0.034
+    },
+    "gemma-4-12b-it-UD-Q8_K_XL": {
+      "n_extracted": 500,
+      "n_spam": 103,
+      "n_useful": 102,
+      "useful_fraction": 0.204
+    },
+    "gemma-4-E4B-it-UD-Q8_K_XL": {
+      "n_extracted": 500,
+      "n_spam": 97,
+      "n_useful": 18,
+      "useful_fraction": 0.036
+    }
+  },
+  "majority_agreement": {
+    "Muse-Glimmer-30B-UD-Q4_K_XL": 0.8978888888888888,
+    "Qwen3.8-27B-UD-Q4_K_XL": 0.9084444444444445,
+    "gemma-4-12b-it-UD-Q8_K_XL": 0.8768888888888888,
+    "gemma-4-E4B-it-UD-Q8_K_XL": 0.8218888888888888
+  },
+  "selection_rule": "highest cross-model majority agreement (tie-break: isUseful fraction, extraction count)",
+  "stored_run": {
+    "rater": "Qwen3.8-27B-UD-Q4_K_XL",
+    "useful_fraction": 0.034,
+    "majority_agreement": 0.9084444444444445,
+    "n_extracted": 500,
+    "n_useful": 17,
+    "n_inserted": 0,
+    "n_updated": 500,
+    "db_path": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db"
+  },
+  "stored_pool_run": {
+    "rater": "Qwen3.8-27B-UD-Q4_K_XL",
+    "useful_fraction": 0.034,
+    "majority_agreement": 0.9084444444444445,
+    "n_extracted": 500,
+    "n_useful": 17,
+    "n_inserted": 76415,
+    "n_updated": 420,
+    "db_path": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/1091500.db",
+    "failures": 0
+  },
+  "thresholds": {
+    "reliable": 0.8,
+    "tentative": 0.667
+  },
+  "n_bootstraps": 1000,
+  "per_aspect": [
+    {
+      "aspect": "multiplayer",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": -0.0010015012508755028,
+      "alpha_ordinal_ci95": [
+        -0.003010525555612542,
+        1.0
+      ],
+      "alpha_detection_nominal": -0.0010015022533800266,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 0,
+      "rating_status": "insufficient_data",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "immersion",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.7358592616378321,
+      "alpha_ordinal_ci95": [
+        0.6920601323600234,
+        0.7836741569537835
+      ],
+      "alpha_detection_nominal": 0.7234574760631687,
+      "alpha_rating_ordinal": 0.7276818767038369,
+      "rating_units_jointly_detected": 111,
+      "rating_status": "ok",
+      "verdict": "tentative"
+    },
+    {
+      "aspect": "community",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.5145193311913785,
+      "alpha_ordinal_ci95": [
+        0.2282177631416235,
+        0.6907594963447599
+      ],
+      "alpha_detection_nominal": 0.5099381458851927,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 3,
+      "rating_status": "insufficient_data",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "replayability",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.6633050182022295,
+      "alpha_ordinal_ci95": [
+        0.6096520702534275,
+        0.711777912021064
+      ],
+      "alpha_detection_nominal": 0.6305004840197266,
+      "alpha_rating_ordinal": 0.5466939088270717,
+      "rating_units_jointly_detected": 52,
+      "rating_status": "ok",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "story",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.8696013671458717,
+      "alpha_ordinal_ci95": [
+        0.839736600715985,
+        0.8983633930990956
+      ],
+      "alpha_detection_nominal": 0.8719025378683632,
+      "alpha_rating_ordinal": 0.6072828201215025,
+      "rating_units_jointly_detected": 193,
+      "rating_status": "ok",
+      "verdict": "reliable"
+    },
+    {
+      "aspect": "monetizationModel",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.41557718592096027,
+      "alpha_ordinal_ci95": [
+        0.26508193898056914,
+        0.5365941274255862
+      ],
+      "alpha_detection_nominal": 0.42025048237981943,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 2,
+      "rating_status": "insufficient_data",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "gameplay",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.6557821704191547,
+      "alpha_ordinal_ci95": [
+        0.6089632378625977,
+        0.7030797460942296
+      ],
+      "alpha_detection_nominal": 0.6583948733597802,
+      "alpha_rating_ordinal": 0.7224798282609683,
+      "rating_units_jointly_detected": 142,
+      "rating_status": "ok",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "controls",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.4120780400407644,
+      "alpha_ordinal_ci95": [
+        0.21687819117441398,
+        0.5988382944801907
+      ],
+      "alpha_detection_nominal": 0.4101346638768174,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 2,
+      "rating_status": "insufficient_data",
+      "verdict": "below_tentative"
+    },
+    {
+      "aspect": "graphics",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.7955570101380629,
+      "alpha_ordinal_ci95": [
+        0.7480118458879643,
+        0.8387441361474811
+      ],
+      "alpha_detection_nominal": 0.7767047473978167,
+      "alpha_rating_ordinal": 0.5980747974736564,
+      "rating_units_jointly_detected": 87,
+      "rating_status": "ok",
+      "verdict": "tentative"
+    },
+    {
+      "aspect": "customization",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.6839705113824821,
+      "alpha_ordinal_ci95": [
+        0.6027542106736661,
+        0.755052783854235
+      ],
+      "alpha_detection_nominal": 0.6794863781506897,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 26,
+      "rating_status": "insufficient_data",
+      "verdict": "tentative"
+    },
+    {
+      "aspect": "audio",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.8922902787836345,
+      "alpha_ordinal_ci95": [
+        0.8438519474332955,
+        0.9331307062373518
+      ],
+      "alpha_detection_nominal": 0.8851585030965265,
+      "alpha_rating_ordinal": 0.7626244049537905,
+      "rating_units_jointly_detected": 56,
+      "rating_status": "ok",
+      "verdict": "reliable"
+    },
+    {
+      "aspect": "difficulty",
+      "n_units": 500,
+      "n_models": 4,
+      "alpha_ordinal_0_5": 0.7311955839924734,
+      "alpha_ordinal_ci95": [
+        0.591633474148729,
+        0.8399599297341078
+      ],
+      "alpha_detection_nominal": 0.7299326423870457,
+      "alpha_rating_ordinal": NaN,
+      "rating_units_jointly_detected": 12,
+      "rating_status": "insufficient_data",
+      "verdict": "tentative"
+    }
+  ],
+  "aggregate_dispersion_mean_cv": {
+    "multiplayer": 1.7320508075688774,
+    "immersion": 0.4310463030326383,
+    "community": 1.0994387336724794,
+    "replayability": 0.6523185865934212,
+    "story": 0.197034109114809,
+    "monetizationModel": 1.191795011939498,
+    "gameplay": 0.4313104405154963,
+    "controls": 1.178207389155069,
+    "graphics": 0.48989996194308605,
+    "customization": 0.7820284693453794,
+    "audio": 0.278529962469447,
+    "difficulty": 0.7957399554911926,
+    "positive_ratio": 0.061788955171740774
+  },
+  "outputs": {
+    "sample": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/sample.csv",
+    "extractions": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/extractions_all_models.csv",
+    "alpha_per_aspect": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/alpha_per_aspect.csv",
+    "aggregate_dispersion": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/aggregate_dispersion.csv",
+    "daily_aggregates": "/home/maria/PycharmProjects/StARAPTOR/out/1091500/rq1/daily_aggregates_per_model.csv",
+    "figures": [
+      "/home/maria/PycharmProjects/StARAPTOR/out/1091500/figures/rq1_alpha_per_aspect.pdf"
+    ]
+  }
+}

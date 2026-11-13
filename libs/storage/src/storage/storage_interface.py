@@ -1,4 +1,5 @@
 import datetime
+import os
 from evaluator.evaluator_interface import ReviewProcessor
 from fetcher.fetcher_interface import fetch_review_history, fetch_kpi
 from pandas import DataFrame
@@ -78,7 +79,8 @@ async def kpi_updater(
     """
 
     # Keep history bounded so a fresh init stays fast and the regressor trains on recent data.
-    HARD_LIMIT_DAYS = 140
+    # The ceiling is configured via STARAPTOR_MAX_LOOKBACK_DAYS in .env (default 140).
+    HARD_LIMIT_DAYS = int(os.getenv("STARAPTOR_MAX_LOOKBACK_DAYS", 140))
     if max_days is None or max_days > HARD_LIMIT_DAYS:
         max_days = HARD_LIMIT_DAYS
 
